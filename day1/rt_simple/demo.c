@@ -62,7 +62,6 @@ int main(int argc, char* argv[])
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &t, NULL);
 
         /* do the stuff */
-        clock_
 
 
         /* calculate next shot */
