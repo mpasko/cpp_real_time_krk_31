@@ -1,0 +1,1 @@
+obj-m	:= char_test.o
