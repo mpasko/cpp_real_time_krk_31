@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <unistd.h>
 
 #define MSGSIZE 16
@@ -41,7 +44,7 @@ main(int argc, char * argv[])
             dup2(p[0],fileno(stdin));
             close(p[0]);
             close(p[1]);
-            fd = open(argv[1],"w");
+            fd = open(argv[1],O_RDWR|O_CREAT,777);
             dup2(fd,fileno(stdout));
             close(fd);
             execlp("sort","sort","-g",NULL);
