@@ -1,0 +1,98 @@
+
+Czym jest IPC
+*************
+
+IPC - Inter-Process Communication - Komunikacja międzyprocesowa. Jest
+to nic innego jak zbiór funkcji jakie udostępnia nam system a które
+mogą służyć do efektywnej komunikacji między procesami.
+
+
+System V
+********
+
+System V udostępnia nam trzy metody takiej komunikacji są to:
+
+1. Kolejki komunikatów
+
+2. Semafory
+
+3. Pamięć wspólna
+
+
+Identyfikatory IPC
+******************
+
+Każda struktura IPC w systemie posiada swój unikalny identyfikator za
+pomocą którego się do niej odwołujemy. Identyfikator to liczba
+całkowita, jest on unikalny w obrębie danego typu IPC tzn. mogą
+istnieć np. kolejka komunikatów oraz semafor o tym samym
+identyfikatorze.
+
+
+Klucze IPC
+**********
+
+Funkcje za pomocą których pozyskujemy struktury IPC żądają od nas
+podania jako jeden z parametrów wartości typu **key_t** która oznacza
+tzw. klucz na którego podstawie otrzymamy strukturę o odpowiednim
+identyfikatorze. Używając kluczy możemy uzgodnić między procesami
+używaną strukturę IPC na kilka sposobów:
+
+* Używając w miejsce klucza wartości IPC_PRIVATE
+
+* Używając wcześniej uzgodnionego klucza
+
+* Generować klucz za pomocą funkcji ftok
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+
+   key_t ftok(const char *pathname, int proj_id);
+
+
+ipc_perm
+========
+
+Dla każdej struktury IPC system przechowuje informacje potrzebne do
+zweryfikowania praw dostępu w strukturze ipc_perm zdefiniowanej w
+nagłówku <sys/ipc.h>
+
+   struct ipc_perm {
+     uid_t cuid;     /* uid twórcy */
+     gid_t cgid;     /* gid twórcy */
+     uid_t uid;      /* uid właściciela */
+     gid_t gid;      /* gid właściciela */
+     mode_t mode;    /* prawa dostępu */
+     ulong seq;      /* licznik uzycia */
+     key_t key;      /* klucz */
+   };
+
+Pole "mode" mogło w Systemie V przyjmować następujące wartości
+
++----------------+--------------------------------------------------------+-------------+--------------------+
+| rodzaj         | kolejka komunikatów                                    | semafor     | pamięć wspólna     |
++================+========================================================+=============+====================+
+| Użytkownik     | MSG_R MSG_W                                            | SEM_R SEM_A | SHM_R SHM_W        |
++----------------+--------------------------------------------------------+-------------+--------------------+
++----------------+--------------------------------------------------------+-------------+--------------------+
++----------------+--------------------------------------------------------+-------------+--------------------+
+
+Litera **A** przy semaforach oznacza alter, ponadto nie istnieją flagi
+wykonania dla struktur IPC.
+
+Generowanie klucza przy użyciu "ftok"
+
+   #include <iostream>
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   using namespace std;
+   int main( )
+   {
+     key_t key;
+     for (char i = 'a'; i <= 'd'; ++i) {
+       key = ftok(".", i);
+       cout << "proj = " << i << " key = [" << hex << key
+            << "] MSB = " << char(key >> 24) << endl;
+     }
+     return 0;
+   }

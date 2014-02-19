@@ -1,0 +1,118 @@
+
+Kolejki komunikatów
+*******************
+
+Kolejkę komunikatów możemy wyobrazić sobie jaką pewną listę składającą
+się oczywiście z komunikatów i przechowywaną przez jądro systemu.
+Każda struktura IPC ma odpowiednią strukturę w której system
+przechowuje dane na jej temat. W przypadku kolejki komunikatów jest to
+struktura "msqid_ds"
+
+   struct msqid_ds {
+     struct ipc_perm msg_perm;
+     struct msg *msg_first; /* pierwszy komunikat w kolejce */
+     struct msg *msg_last;  /* ostatni */
+     time_t msg_stime;      /* czas ostatniego msgsend */
+     time_t msg_rtime;      /* czas wywolania ostatniego msgrcv */
+     time_t msg_ctime;      /* czas ostatniej zmiany */
+     ushort msg_cbytes;     /* liczba bajtow w kolejce */
+     ushort msg_qnum;       /* liczba komunikatów w kolejce */
+     ushort msg_qbytes;     /* max liczba bajtow w kolejce */
+     ushort msg_lspid;      /* pid ostatniego msgsnd */
+     ushort msg_lrpid;      /* pid ostatniego msgrcv */
+   };
+
+
+Tworzenie kolejki komunikatów
+=============================
+
+Kolejkę komunikatów możemy utworzyć za pomocą funkcji msgget której
+deklaracja wygląda następująco
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/msg.h>
+
+   int msgget(key_t key, int msgflg);
+
+Jeśli chcemy utworzyć nową kolejkę należy podać w parametrze key
+wartość **IPC_PRIVATE** lub jeśli wartość key jest różna od tej flagi
+oraz w parametrze drugim podamy **IPC_CREAT** przy czym dla zadanego
+key kolejka nie istnieje (jeśli istnieje zostanie nam zwrócony jej
+identyfikator). Możemy dodac do drugiego parametru flagę **IPC_EXCL**
+wtedy w przypadku istnienia kolejki funkcja zakończy się błędem. Jeśli
+tworzymy nową kolejkę system inicjuje odpowiednie z opisanych
+wcześniej struktur a my otrzymujemy jako rezulatat działania funkcji
+odpowiedni identyfikator. Przy tworzeniu nowej kolejki możemy w polu
+flags dodać także zestaw flag określających prawa dostępu do naszej
+kolejki - zostaną one przypisane do odpowiedniego pola w strukturze
+**ipc_perm**
+
+Gdy mamy już dostęp do kolejki komunikatów i chcemy wykonać na niej
+jakieś operacje (nie używanie) możemy użyć następującej funkcji
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/msg.h>
+
+   int msgctl(int msqid, int cmd, struct msqid_ds *buf);
+
+Funkcja ta pobiera identyfikator kolejki, polecenie, oraz dodatkowy
+argument który jest wykorzystywany w zależności od zadanego polecenia.
+Możemy użyć komend takich jak:
+
+* **IPC_SET** - powoduje ustawienie pewnych pól w strukturze
+  **msqid_ds** odnoszącej się do odpowiedniej kolejki komunikatów pola
+  są wypełnianie wartościami z struktury podanej w trzecim parametrze.
+  Pola które są zmieniane to "msg_perm.uid", "msg_perm.gid",
+  "msg_perm.mode" oraz "msg_perm.qbytes"
+
+* **IPC_STAT** - powoduje pobranie struktury "msqid_ds" do struktury
+  podanej jako trzeci parametr
+
+* **IPC_RMID** - powoduje natychmiastowe usunięcie podanej kolejki
+  komunikatów. Po usunięciu procesy używające kolejki otrzymują przy
+  próbie wykonania operacji błąd.
+
+Oczywiście wykonanie odpowiednich poleceń na kolejce za pomocą
+"msgctl" jest możliwe tylko jeśli posiadamy odpowiednie prawa dostępu
+do danej struktury IPC.
+
+
+Używanie kolejki komunikatów
+============================
+
+Za pomocą kolejki komunikatów możemy oczywiście przesyłać komunikaty
+służy do tego odpowiednie polecenie:
+
+int msgsnd(int msqid, const void* msgp, size_t msgsz, int msgflg)
+
+Komunikaty jakie możemy wysyłać muszą być odpowiedniego formatu tzn
+pierwszą daną w komunikacie musi być liczba typu long , oznaczająca
+umowny typ komunikatu a po niej powinny znajdować się nasze dane.
+Wskaźnik do takiego komunikatu podajemy w drugim parametrze funkcji
+**msgsnd** kolejny parametr to rozmiar komunikatu a ostatni to flaga
+którą możemy ustawić na "IPC_NOWAIT" , podanie tej flagi spowoduje że
+w razie gdy kolejka komunikatów jest pełna funkcja natychmiast
+przerwie swoje działanie , bez tej flagi program zostaje zablokowany
+do momenty gdy bedzie można wysłać komunikat lub kolejka zostanie
+usunięta.
+
+Do odbierania komunikatów służy analogiczna funkcja
+
+int msgrcv(int msqid, void* ptr, size_t nbytes, long type, int msgflg)
+
+Podobnie jak poprzednio podajemy jako parametry identyfikator kolejki,
+wskaźnik na miejsce gdzie ma zostać przekazany komunikat, ilość danych
+oraz flagi, dodatkowy parametr type pozwala zdefiniować które
+komunikaty chcemy pobrać z kolejki, jeśli "type = 0" to pobierzemy
+pierwszy komunikat z kolejki , gdy wartość ta będzie dodatnia ,
+pierwszy którego typ zgadza się z wartością a gdy ujemna, pierwszy o
+najmniejszej wartości nie większej od wartości bezwzględnej type.
+
+Podobnie jak poprzednio do ostatniego parametru możemy wpisać wartość
+"IPC_NOWAIT" jeśli nie chcemy czekać na pojawienie się komunikatu w
+kolejce . Ponadto możemy podać flagę "MSG_NOERROR" która powoduje
+skrócenie komunikatu do wartości podanej w parametrze "nbytes", bez
+tej flagi w przypadku zbyt dużego komunikatu funkcja kończy się
+błędem.

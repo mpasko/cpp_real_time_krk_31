@@ -1,0 +1,20 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/devel/cpp_real_time_krk_31/day3/signal_backtrace/main.cpp
+stdlib.h
+-
+stdio.h
+-
+signal.h
+-
+execinfo.h
+-
+ucontext.h
+-
+

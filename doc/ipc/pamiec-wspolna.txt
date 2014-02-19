@@ -1,0 +1,75 @@
+
+Pamięć wspólna
+**************
+
+Ostatnią struktura IPC jest pamięć wspólna - pozwala na dostęp do
+wspólnego segmentu pamięci kliku procesom. Sami musimy jednak zadbać o
+odpowiednia synchronizację działań na wspólnym obszarze. Pamięć
+wspólna jest opisywana przez strukturę "shmid_ds"
+
+   struct shmid_ds {
+     struct o_ipc_perm shm_perm;
+     struct anon_map *shm_amp;   /* wskaźnik do jądra systemu */
+     int shm_segsz;              /* rozmiar segmentu w bajtach */
+     ushort shm_lkcnt;           /* liczba rygli tego segmentu */
+     pid_t snm_lpid;             /* identyfikator procesu ostatniej operacji */
+     pid_t shm_cpid;             /* identyfikator procesu twórcy */
+     ulong shm_nattch;           /* bieżąca liczba dołączeń */
+     ulong shm_cnattch;
+     time_t shm_atime;           /* czas ostatniego dołączenia */
+     time_t shm_dtime;           /* czas ostatniego odłączenia */
+     time t shm ctime;           /* czas ostatniej zmiany */
+   };
+
+Podobnie jak w poprzednich strukturach najpierw musimy pozyskać
+identyfikator struktury IPC za pomocą "shmget".
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/shm.h>
+
+int shmget(key_t key, int size, int flag)
+
+Argument size określa minimalny rozmiar segmentu pamięci jaki
+chcielibyśmy dostać. Analogicznie do poprzedników do kontroli nad
+struktura służy polecenie "shmctl".
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/shm.h>
+
+int shmctl (int shmid, int cmd, struct shmid_ds *buf)
+
+Znów dostępne są dla nas 3 polecenia tożsame z tymi u poprzedników
+czyli "IPC_STAT", "IPC_SET", "IPC_RMID" a ponadto "SHM_LOCK" i
+"SHM_UNLOCK" które odpowiednio mogą zablokować i odblokować segment
+pamięci wspólnej.
+
+Jeśli mamy już identyfikator pamięci wspólnej to możemy dołączyć ją do
+naszego procesu za pomocą funkcji:
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/shm.h>
+
+void shmat(int shmid, void* addr, int flag)
+
+Jeżeli w argumencie addr podamy zero to system wybierze dla nas
+pierwszy dostępny adres, jesli addr jest różny od zera i nie podaliśmy
+flagi "SHM_RND" to segment dołączony zostanie do adresu podanego w
+argumencie. Jeśli "SHM_RND" jest podana to dołączony zostanie do
+najbliższego adresu będącego wielokrotnością "SHMLBA". Ponadto jeśli
+podamy jako flagę "SHM_RDONLY" to dołączony segment będzie dostępny w
+trybie tylko do odczytu.
+
+Po zakończeniu pracy możemy odłączyć segment pamięci za pomocą
+funkcji:
+
+   #include <sys/types .h>
+   #include <sys/ipc.h>
+   #include <sys/shm.h>
+
+int shmdt(void* addr)
+
+Przy czym argument "addr" powinien być wartością otrzymaną z wywołania
+funkcji "shmat".

@@ -1,0 +1,680 @@
+
+Procesy
+*******
+
+Proces to twór abstrakcyjny, który składa się z wykonywalnego
+(działającego) programu oraz bieżących danych o jego stanie i
+zasobach, za pomocą których system operacyjny steruje jego wykonaniem.
+W systemach opartych na filozofii UNIX-a procesy mogą być wykonywane
+równolegle, przynajmniej sprawiają takie wrażenie. Z punktu widzenia
+pojedynczych procesów odnosi się wrażenie, że każdy proces ma
+nieograniczony dostęp do wszystkich zasobów systemowych na zasadzie
+wyłączności. Oba wrażenia są iluzją. W zależności od dostępnej ilości
+fizycznych procesorów i rdzeni, system może wykonywać jednocześnie kod
+skończonej ilości procesów.
+
+Kontekst procesu obejmuje zawartość logicznej przestrzeni adresowej
+procesu, rejestrów sprzętowych oraz struktur danych jądra związanych z
+procesem. W systemieLinux można wyróżnić trzy poziomy kontekstu:
+
+kontekst poziomu użytkownika, na który składa się:
+
+* obszar kodu (instrukcji),
+
+* obszar danych,
+
+* obszar stosu,
+
+kontekst poziomu rejestru zawierający:
+
+* licznik rozkazów,
+
+* rejestr stanu procesora,
+
+* wskaźnik stosu,
+
+* rejestry ogólnego przeznaczenia,
+
+kontekst poziomu jądra zawierający:
+
+* struktury danych jądra opisujące proces,
+
+* stos jądra.
+
+Proces zawsze wykonuje się w swoim kontekście. Jeśli proces wywoła
+funkcję systemową, to kod jądra realizujący tę funkcję również wykona
+się w **kontekście bieżącego procesu**. Procesor przerywa wykonywanie
+kodu bieżącego procesu w sytuacji, gdy:
+
+* wystąpi przerwanie informujące o wykorzystaniu przydzielonego kwantu
+  czasu procesora,
+
+* wystąpi dowolne przerwanie sprzętowe lub programowe,
+
+* proces wywoła funkcję systemową.
+
+Zachodzi wtedy konieczność zapamiętania kontekstu przerwanego procesu,
+aby można było później wznowić jego wykonywanie od miejsca, w którym
+zostało przerwane. Czynność tę określa się zachowaniem kontekstu
+procesu.
+
+Wątek umożliwia pojedynczemu programowi działanie w kilku miejscach
+kodu jednocześnie. Wszystkie wątki utworzone przez program dzielą
+większość zasobów programu, tj: informacje o otwartych plikach,
+uprawnienia, bieżący katalog, obraz pamięci itd. Gdy tylko jeden z
+wątków procesu modyfikuje zmienną globalną, pozostałe natychmiast
+widzą jej nową wartość.
+
+Wiele implementacji systemów Unixowych, w tym wersje Systemu V (AT&T),
+zaprojektowano tak, aby podstawową jednostką systemu zarządzaną przez
+jądro był wątek, a procesy stały się kolekcjami wątków dzielących
+zasoby. Dzięki współdzieleniu zasobów przełączanie między wątkami jest
+znacznie szybsze niż między procesami.
+
+Z powyższych powodów w wielu systemach Unixowych istnieje podwójny
+model procesu, w którym odróżnia się wątki od procesów.
+
+
+Model procesu Linux
+===================
+
+Każdy proces w systemie Linux jest reprezentowany przez strukturę
+task_struct. Struktura jest dynamicznie alokowana przez jądro w czasie
+tworzenia procesu. Jedynym odstępstwem jest tu proces INIT_TASK o
+identyfikatorze PID=0, który jest tworzony statycznie w czasie
+startowania systemu. Struktury task_struct reprezentujące wszystkie
+procesy zorganizowane są w postaci dwukierunkowej listy cyklicznej. W
+nowszych wersjach jądra (od wersji 2.4) stosowana jest specjalna
+tablica o nazwie pidhash[]. Jest to tzw. tablica skrótów. Jej rozmiar
+jest również ograniczony, ale każda pozycja może wskazywać jeden lub
+listę kilku procesów. Dzięki temu liczba procesów w systemie jest
+ograniczna tylko rozmiar dostępnej pamięci. Równomiernym
+rozmieszczaniem procesów w tablicy zajmuje się specjalna funkcja,
+która oblicza indeks tablicy wykonując zestaw operacji logicznych na
+wartości identyfikatora PID procesu. Procesy, dla których funkcja
+zwróci ten sam indeks tablicy, łączone są w listę. Ta sama funkcja
+umożliwia szybkie odnalezienie procesu w tablicy na podstawie wartości
+PID, unikając przeglądania wszystkich indeksów. Dodatkowo struktury
+task_struct wszystkich procesów połączone są w dwukierunkową listę
+cykliczną. Wskaźniki do poprzedniego i następnego procesu z listy
+zapisane są jako pola prev_task i next_task w strukturze każdego
+procesu.
+
+[obraz][obraz]
+
+Przełączanie kontekstu procesów w Linuxie jest dość szybkie, podobnie
+jak przełączanie wątków w innych Unixach. Zasugerowało to twórcom
+Linuxa, że nie należy zmieniać tego co dobrze działa by wprowadzić
+wątki. Zdecydowano się za to na by pozwolić procesom na korzystanie z
+zasobów dzielonych w bardziej liberalny sposób.
+
+W Linuxie proces jest zdefiniowany wyłącznie jako jednostka, której
+działaniem zarządza system, a jedyną rzeczą charakterystyczną procesu
+jest jego kontekst wykonania. Nie wynika z tego nic dla dzielenia
+zasobów, ponieważ proces macierzysty tworzący proces potomny ma pełną
+kontrolę nad tym, które zasoby będą między nimi dzielone. ("clone")
+
+Takie podejście pozwala zachować tradycyjny Unixowy model zarządzania
+procesami. Interfejs wątków jest budowany poza jądrem.
+
+Cykl życia procesu:
+
+[obraz]
+
+
+Atrybuty procesów
+=================
+
+Atrybuty procesu zapisane w strukturze task_struct można podzielić na
+kilka kategorii:
+
+* stan procesu  - stan, w którym znajduje się proces w obecnej chwili,
+  powiązania z procesami pokrewnymi - wskaźniki do procesu
+  macierzystego, procesów rodzeństwa oraz do sąsiednich procesów na
+  liście dwukierunkowej,
+
+* identyfikatory  - numery identyfikatorów procesu, grupy,
+  właściciela,
+
+* parametry szeregowania  - informacje dla planisty procesów dotyczące
+  polityki szeregowania, priorytetu i zużycia czasu procesora,
+
+* atrybuty związane z systemem plików - opis plików używanych
+  aktualnie przez proces,
+
+* parametry pamięci wirtualnej procesu  - opis odwzorowania pamięci
+  wirtualnej procesu w pamięci fizycznej systemu,
+
+* odmierzanie czasu - informacje o czasie utworzenia procesu,
+  wykorzystaniu czasu pracy procesora, czasie spędzonym w trybie jądra
+  i w trybie użytkownika oraz o ustawieniach zegarów w procesie,
+
+* obsługa sygnałów  - informacje o nadesłanych sygnałach oraz o
+  blokowaniu i sposobach obsługi poszczególnych sygnałów w procesie,
+
+* kontekst poziomu rejestru - zawartość rejestrów sprzętowych
+  procesora w chwili przerwania bieżącego procesu.
+
+Wartości te można odczytać przy pomocy funkcji systemowych:
+
+pid_t getpid(void)
+
+pid_t getppid(void)
+
+pid_t getpgrp(void)
+
+pid_t getpgid(pid_t pid)
+
+Funkcja "getpgid()" zwraca identyfikator grupy procesu wskazanego
+argumentem "pid". Wartość "pid" pozostaje oczywiście niezmienna przez
+cały okres działania procesu. Identyfikator "ppid" może ulec zmianie
+jedynie w wyniku zakończeniu procesu macierzystego i adopcji przez
+proces "init". Identyfikatory grupy i sesji mogą być zmienione przez
+proces.
+
+[obraz]
+
+Identyfikatory użytkownika i grupy użytkowników określają uprawnienia
+procesu. Proces przechowuje cztery pary takich identyfikatorów:
+
+* uid gid - identyfikatory rzeczywiste,
+
+* euid  egid  - identyfikatory obowiązujące,
+
+* suid  sgid  - identyfikatory zapamiętane,
+
+* fsuid fsgid - identyfikatory dostępu do systemu plików.
+
+Identyfikatory rzeczywiste określają właściciela procesu, czyli
+użytkownika, który uruchomił proces. Można je odczytać przy pomocy
+funkcji:
+
+uid_t getuid(void)
+
+gid_t getgid(void)
+
+Identyfikatory zapamiętane służą do przechowania wartości
+identyfikatorów rzeczywistych na czas zmiany ich oryginalnych wartości
+dokonanych za pomocą funkcji systemowych. Zapamiętanie identyfikatorów
+następuje automatycznie i nie wymaga dodatkowych działań ze strony
+procesu. Identyfikatory obowiązujące wykorzystywane są do sprawdzania
+uprawnień procesu i z tego względu mają największe znaczenie. Pobranie
+wartości identyfikatorów obowiązujących umożliwiają odpowiednio
+funkcje:
+
+uid_t geteuid(void)
+
+gid_t getegid(void)
+
+Zazwyczaj po utworzeniu procesu identyfikatory rzeczywiste,
+zapamiętane i obowiązujące przyjmują te same wartości równe
+identyfikatorom właściciela procesu. W trakcie działania każdy proces
+może zmienić swoje identyfikatory obowiązujące. Jednak tylko procesy
+administratora działające z euid równym 0 mogą dokonać dowolnej
+zmiany. Procesy zwykłych użytkowników mogą jedynie ustawić takie
+wartości, jakie przyjmują ich identyfikatory rzeczywiste lub
+zapamiętane. Jedyną możliwość zmiany identyfikatorów obowiązujących w
+zwykłych procesach stwarza wykorzystanie specjalnych bitów w atrybucie
+uprawnień dostępu do pliku z programem. Jeżeli właściciel programu
+ustawi bit ustanowienia użytkownika setuid lub bit ustanowienia grupy
+setgid w prawach dostępu do pliku, to każdy użytkownik będzie mógł
+uruchomić program z identyfikatorem obowiązującym właściciela programu
+i własnym identyfikatorem rzeczywistym. W ten sposób uzyska
+uprawnienia właściciela programu i zachowa możliwość przywrócenia
+własnych uprawnień oraz przełączania się pomiędzy nimi przy pomocy
+funkcji systemowych.
+
+   #include <sys/types.h>
+   #include <unistd.h>
+   #include <stdio.h>
+
+   main() {
+     uid_t uid = getuid(),     // rzeczywisty user-id
+          euid = geteuid();    // efektywny user-id
+     gid_t gid = getgid(),     // rzeczywisty group-id
+          egid = geteuid();    // efektywny group-id
+
+     printf("UID = %d\t EUID = %d\t GID = %d\t EGID = %d \n",uid, euid, gid, egid);
+   }
+
+PID jest dodatnią liczbą całkowitą, która jednoznacznie określa
+działający proces i jest zapamiętywana w zmiennych typu pid_t.
+
+   #include <sys/types.h>
+   #include <unistd.h>
+   #include <stdio.h>
+
+   main() {
+
+     pid_t pid  = getpid();
+     pid_t ppid = getppid();
+     pid_t pgrp = getpgrp()
+     pid_t pgid = getpgid(pid)
+
+     printf("PID  = %d\n", pid );
+     printf("PPID = %d\n", ppid );
+     printf("PGRP = %d\n", pgrp );
+     printf("pgid = %d\n", pgid );
+   }
+
+Jeżeli proces ginie, jego kod wyjścia jest pamiętany tak długo w
+tablicy procesów, aż poprosi o niego proces macierzysty. Procesy,
+które zakończyły działanie, a informacja o nich jest utrzymywana by
+mieć dostęp do ich kodu wyjścia, są nazywane zombie. Zaraz po
+odczytaniu kodu wyjścia procesu zombie jest on usuwany.
+
+Jeżeli proces rodzica kończy działanie, przed zakończeniem procesów
+potomnych, procesy potomne stają się potomkami procesu *init*. Proces
+*init* jest pierwszym procesem, który powstaje podczas inicjowania
+systemu. Jego PID ma wartość 1. Jednym z jego głównych zadań jest
+odbieranie wartości kodów wyjścia procesów, których rodzice zginęli,
+by móc usunąć je z tablicy jądra.
+
+
+Argumenty programu
+==================
+
+Istnieją dwa typy wartości przekazywanych do nowych programów w
+chwili ich uruchomienia:
+
+* Argumenty wiersza poleceń; prototyp funkcji "main()":
+
+  "int main(int argc, char *argv[]);" Wartości zwracane,
+  interpretowane jest tylko 8 najmniej znaczących bitów: 0 = OK; od -1
+  do -128 = proces zatrzymany przez inny proces lub jądro; od 1 do 127
+  = zakończenie z powodu błędu
+
+* Zmienne środowiskowe.
+
+  Zmienna environ zdefiniowana w pliku "<unistd.h>" zawiera wskaźnik
+  do środowiska. Najczęściej ze zmiennych środowiska korzysta się za
+  pośrednictwem funkcji: "getenv()", "putenv()" oraz (niezgodna z
+  POSIX ale występuje w BSD i Linuxie) "setenv()".
+
+   #include <unistd.h>
+   #include <stdio.h>
+   #include <stdio.h>
+
+   // ostatnim elementem tablicy jest NULL
+   extern char **environ;
+
+   int main(int argc, char **argv) {
+
+     // argumenty wywołania (znane z C)
+     if( argc == 1 )
+       printf("Brak parametrow wywolania\n");
+     else {
+       printf("Argumenty:\t");
+
+       while( --argc > 0)
+         printf("%s\t", *++argv);
+
+       printf("\n");
+     }
+
+     // putenv() i getenv()
+     putenv("QQ=to tylko test");
+     printf("\n Pobralem USER = %s\n", getenv("USER"));
+     printf("\n");
+
+     // lista zmiennych srodowiska
+     while(*environ)
+       printf("%s\n", *environ++);
+
+     // co tu sie stanie
+     printf("\n Pobralem USER = %s\n", getenv("USER"));
+
+     return 0;
+   }
+
+
+Tworzenie procesów potomnych
+============================
+
+W Linuxie są dostępne dwie funkcje systemowe do tworzenia nowych
+procesów: "fork()" i "clone()". Funkcja "fork()" posiada następującą
+własność: powrót z jej wywołania następuje nie raz, ale dwa razy. Raz
+w procesie macierzystym i raz w procesie potomnym. Zgodnie z POSIX nie
+można zakładać, który powrót będzie pierwszy. Każdy z powrotów z
+"fork()" przekazuje inną wartość. W procesie macierzystym jest to PID
+nowo utworzonego procesu potomnego, natomiast w procesie potomnym 0.
+Powyższa różnica jest jedyną różnicą widoczną w procesach. Proces
+potomny i macierzysty mają: ten sam obraz pamięci, te same
+uprawnienia, te same otwarte pliki, te same procedury obsługi
+przerwań,
+
+   #include <sys/types.h>
+   #include <unistd.h>
+   #include <stdio.h>
+
+   int main (void) {
+     pid_t child;
+
+     if( !(child=fork()) ) {
+       printf("\n Proces potomny: PID=%d, PPID=%d\n",getpid(),getppid());
+       exit(0);
+     }
+     printf("\n Proces macierzysty. Potomkiem jest %d. PID=\%d, PPID=%d\n",
+        child,getpid(),getppid());
+
+     return 0;
+   }
+
+[obraz]
+
+
+Exec
+====
+
+Funkcje "exec" umożliwiają przekazywanie sterowania naszego procesu
+między różnymi programami wykonywalnymi. Istnieje wiele funkcji
+biblioteki implementujących wywoałnie "exec", jednak jedno właściwe
+to: "execve". Pozostałe funkcje oferowane przez bibliotekę sa w
+istocie opakowaniami tego wywołania.
+
+[obraz]
+
+Sama funkcja "execve" ma następującą sygnaturę:
+
+int execve(const char* filename, char* const argv[], char* const envp[])
+
+Wywołanie systemowe "execve" szuka wskazanego przez nas pliku,
+określa, czy dany plik jest wykonywalny, i jeśli tak, próbuje go
+załadować i uruchomić. Wywołania systemowe z reguły są znacznie
+prostsze i nie realizują tak wielu zadań, "execve" jest pod tym
+względem nietypowe. Jądro musi najpierw zweryfikować uprawnienia
+zdefiniowane dla danego pliku. Właściciel procesu musi dysponować
+uprawnieniami wykonywania tego pliku, w przeciwnym razie jądro nie
+podejmie próby jego odczytania. Jeśli odpowiedni test zakończy się
+niepowodzeniem, wywołanie "execve" zwróci błąd (wartość -1) i
+przypisze zmiennej "errno" wartość "EPERM". Jeśli test uprawnień
+zakończy się pomyślnie, jądro powinno przystąpić do analizy zawartości
+danego pliku i na tej podstawie określić, czy jest to plik
+wykonywalny.
+
+Pozostałe wersje funkcji "exec":
+
+int execv(const char* filename, char* const argv[])
+
+int execl(const char* filename, const char* arg0, ...)
+
+int execle (const char *filename, const char *arg0, ..., char *const env[] )
+
+int execvp(const char* filename, char* const argv[])
+
+int execlp(const char* filename, const char* arg0, ...)
+
+Oznaczenia:
+
+* **l** - lista argumentów
+
+* **v** - tablica argumentów
+
+* **e** - tablica zmiennych środowiskowych, bieżąca lista zmiennych
+  nie jest przekazywana
+
+* **p** - system w trakcie uruchamiania użyje **PATH** do wyszukania
+  pliku
+
+Pliki wykonywalne dzielą się na trzy kategorie:
+
+* skrypty wykonywalne
+
+     "#!/bin/bash"
+
+* wykonywalne pliki obiektów
+
+     ELF, ECOFF
+
+* rozmaite binaria
+
+     uruchamianie różnych binarów poprzez wywołanie ich odpowiedniego
+     interpretera, jak "wine" dla aplikacji Windows, czy "javy" dla
+     plików ".jar"
+
+   #include <iostream>
+   #include <cstdio>
+   #include <unistd.h>
+
+   using namespace std;
+
+   int main(int argc, char *argv[ ]) {
+     if ( argc > 1 ) {
+       execvp(argv[1], &argv[1]);
+       perror("exec failure");
+
+       return 1;
+     }
+     cerr << "Usage: " << *argv << " exe [arg(s)]" << endl;
+     return 2;
+   }
+
+
+Czekając na proces
+==================
+
+Kiedy proces kończy pracę, wysyła do wswojego procesu macierzystego
+sygnał "SIGCHLD". proces macierzysty domyśnie ignoruje ten sygnał, ale
+odpowiednie informacje nie są tracone. Stan procesu potomnego
+pozostaje w pamięci do czasu jego odczytania za pomocą jednej z
+funkci:
+
+pid_t wait(int* status)
+
+pid_t waitpid(pid_t pid, int* status, int options)
+
+pid_t wait3(int *status, int options, struct rusage *rusage)
+
+pid_t wait4(pid_t pid, int *status, int options, struct rusage *rusage)
+
+Jednym z argumentów do funkcji "wait", jest wskaźnik do liczby
+całkowitej. Jeśli wskaźnik jest równy NULL, to argument jest
+ignorowany. Jeśli wskaźnik był różny od NULL, to po powrocie będzie
+zawierał wskazanie na status zakończenia procesu potomnego,
+przekazywany przez "exit()". Wartość ta jest zapamiętywana w 8
+starszych bitach wskazywanego wyniku (makro WEXITSTATUS). 8 młodszych
+bitów musi być równe 0 (makro WIFEXITED).
+
+Wartość zwracana przez funkcję "wait()" to zwykle ID procesu
+zakończonego potomka. Jeśli "wait()" zwróci "(pid_t) -1", może to
+oznaczać, że nie istnieje żaden proces potomny, wówczas "errno" będzie
+zawierać kod błędu "ECHILD".
+
+Oczekiwanie na zakończenie pracy przez proces potomny określanie jest
+jako "reaping". Jeśli proces macierzysty zaniedbuje kwestię
+oczekiwania na zakończenie procesu potomnego, proces potomny staje się
+zombie - jądro stale utrzymuje informacje niezbędne do określenia kodu
+wyjścia.
+
+W systemie Linux nie ma znaczenia, czy proces potomny zakończy pracę
+przez wywołaniem przez proces macierzysty funkcji "wait", czy po tym
+zdarzeniu. W obu przypadkach "wait" zachowa się niemal identycznie,
+różnica polega na blokowaniu procesu macierzystego, gdy w chwili
+wywołania proces potomny nie zakończył jeszcze pracy. Jeśli proces
+macierzysty zakończy działanie przed swoim procesem potomnym, to
+proces potomny będzie kontynuował przetwarzanie, mimo że jest
+adoptowany przez proces "init (pid 1)". Kiedy proces potomny zakończy
+pracę, jego kod wyjścia zostanie zagarnięty przez nowy proces
+macierzysty "init". Wszystkie procesy zombie są adaptowane i
+zagarniane przez proces "init" z chwilą zakończenia przetwarzania
+przez swoje procesy macierzyste.
+
+Uwaga: Jądro nie udostępnia informacji o procesach potomnych do czasu ich
+  zagarnięcia. Użycie opcji "WUNTRACED" pozwala na zatrzymanie wprost
+  procesu potomnego w celu weryfikacji poziomu wykorzystania zasobów:
+
+   #include <sys/time.h>
+   #include <sys/resource.h>
+
+   void printRusage(const struct rusage *ru)
+   {
+
+       printf("CPU time (secs):         user=%.3f; system=%.3f\n",
+               ru->ru_utime.tv_sec + ru->ru_utime.tv_usec / 1000000.0,
+               ru->ru_stime.tv_sec + ru->ru_stime.tv_usec / 1000000.0);
+               printf("Max resident set size:   %ld\n", ru->ru_maxrss);
+       printf("Integral shared memory:  %ld\n", ru->ru_ixrss);
+       printf("Integral unshared data:  %ld\n", ru->ru_idrss);
+       printf("Integral unshared stack: %ld\n", ru->ru_isrss);
+       printf("Page reclaims:           %ld\n", ru->ru_minflt);
+       printf("Page faults:             %ld\n", ru->ru_majflt);
+       printf("Swaps:                   %ld\n", ru->ru_nswap);
+       printf("Block I/Os:              input=%ld; output=%ld\n",
+               ru->ru_inblock, ru->ru_oublock);
+       printf("Signals received:        %ld\n", ru->ru_nsignals);
+       printf("IPC messages:            sent=%ld; received=%ld\n",
+               ru->ru_msgsnd, ru->ru_msgrcv);
+       printf("Context switches:        voluntary=%ld; "
+       "involuntary=%ld\n", ru->ru_nvcsw, ru->ru_nivcsw);
+   }
+
+   struct rusage ru;
+
+   kill(pid, SIGSTOP);
+   r = wait4(pid, &status, WUNTRACED, &ru);
+
+   printRusage( &ru );
+
+   if (r == pid)
+       kill(pid, SIGCONT);
+
+
+Wywołanie systemowe "clone"
+---------------------------
+
+Wywołanie systemowe "clone" jest elementem systemu Linux i służy do
+tworzenia procesów oraz wątków. Wywołania "clone" nie należy stosować
+w kodzie który ma być przenośny. Należy wtedy użyć interfejsu POSIX.
+Wywołanie "clone" daje programiście pełną kontrolę nad zakresem
+elementów tworzonego procesu potomnego, które mają być współdzielone z
+jego procesem macierzystym.
+
+GLIBC implementuje wywołania systemowe dla funkcji "fork", "exec",
+"pthread_create" niemal wyłącznie z wykorzystaniem wywołania
+systemowego "clone".
+
+Przykładowe użycie:
+
+   #include <sys/wait.h>
+   #include <fcntl.h>
+   #include <sched.h>
+   #include <sys/types.h>
+   #include <stdio.h>
+   #include <stdlib.h>
+   #include <unistd.h>
+   #include <errno.h>
+   #include <string.h>
+
+   static int childFunc(void *arg)
+   {
+       if (close(*((int *) arg)) == -1)
+           exit(-1);
+
+       return 0;
+   }
+
+   int main(int argc, char *argv[])
+   {
+       const int STACK_SIZE = 65536; /* rozmiar stosu dla sklonowanej funkcji */
+       char *stack;                  /* początek bufora stosu */
+       char *stackTop;               /* koniec bufora stosu */
+       int s, fd, flags;
+
+       fd = open("/dev/null", O_RDWR);
+       if (fd == -1)
+           exit(-1);
+
+       /* co klonować */
+       flags = (argc > 1) ? CLONE_FILES : 0;
+
+       /* stack */
+       stack = (char*)malloc(STACK_SIZE);
+       if (stack == NULL)
+           exit(-1);
+
+       stackTop = stack + STACK_SIZE;      /* szczyt stosu */
+
+       if (clone(childFunc, stackTop, flags, (void *) &fd) == -1)
+           exit(-1);
+
+       if (waitpid(-1, NULL, __WCLONE) == -1)
+           exit(-1);
+
+       printf("dziecko zakonczylo \n");
+
+       /* Did close() of file descriptor in child affect parent? */
+
+       s = write(fd, "1", 1);
+       if (s == -1 && errno == EBADF)
+           printf("FD %d zamknięty\n", fd);
+       else if (s == -1)
+           printf("write() na FD=%d nie powiodl sie (%s)\n",
+                  fd, strerror(errno));
+       else
+           printf("write() na FD=%d powiodl sie\n", fd);
+
+       exit(EXIT_SUCCESS);
+   }
+
+Przypisanie określonego PID do procesorów:
+
+   #include <sched.h>
+
+   int sched_setaffinity(pid_t pid, size_t cpusetsize,
+                        cpu_set_t *mask);
+
+   int sched_getaffinity(pid_t pid, size_t cpusetsize,
+                        cpu_set_t *mask);
+
+   void CPU_ZERO(cpu_set_t *set);
+
+   void CPU_SET(int cpu, cpu_set_t *set);
+   void CPU_CLR(int cpu, cpu_set_t *set);
+   int  CPU_ISSET(int cpu, cpu_set_t *set);
+
+   int  CPU_COUNT(cpu_set_t *set);
+
+   void CPU_AND(cpu_set_t *destset,
+             cpu_set_t *srcset1, cpu_set_t *srcset2);
+   void CPU_OR(cpu_set_t *destset,
+             cpu_set_t *srcset1, cpu_set_t *srcset2);
+   void CPU_XOR(cpu_set_t *destset,
+             cpu_set_t *srcset1, cpu_set_t *srcset2);
+
+   int  CPU_EQUAL(cpu_set_t *set1, cpu_set_t *set2);
+
+   cpu_set_t *CPU_ALLOC(int num_cpus);
+   void CPU_FREE(cpu_set_t *set);
+   size_t CPU_ALLOC_SIZE(int num_cpus);
+
+   void CPU_ZERO_S(size_t setsize, cpu_set_t *set);
+
+   void CPU_SET_S(int cpu, size_t setsize, cpu_set_t *set);
+   void CPU_CLR_S(int cpu, size_t setsize, cpu_set_t *set);
+   int  CPU_ISSET_S(int cpu, size_t setsize, cpu_set_t *set);
+
+   int  CPU_COUNT_S(size_t setsize, cpu_set_t *set);
+
+   void CPU_AND_S(size_t setsize, cpu_set_t *destset,
+             cpu_set_t *srcset1, cpu_set_t *srcset2);
+   void CPU_OR_S(size_t setsize, cpu_set_t *destset,
+             cpu_set_t *srcset1, cpu_set_t *srcset2);
+   void CPU_XOR_S(size_t setsize, cpu_set_t *destset,
+             cpu_set_t *srcset1, cpu_set_t *srcset2);
+
+   int  CPU_EQUAL_S(size_t setsize, cpu_set_t *set1, cpu_set_t *set2);
+
+Ustawanie oraz odczytywanie planisty i priorytetu dla określonego PID:
+
+   #include <sched.h>
+
+   int sched_setscheduler(pid_t pid, int policy,
+                          const struct sched_param *param);
+
+   int sched_getscheduler(pid_t pid);
+
+   struct sched_param {
+       ...
+       int sched_priority;
+       ...
+   };

@@ -1,0 +1,232 @@
+
+Komunikacja za pomocą potoków
+*****************************
+
+Potok jest używany najczęściej jako jednokierunkowy kanał
+komunikacyjny, łączący ze sobą powiązane procesy, stanowiąc zarazem
+uogólnienie pojęcia pliku w systemie. Na jednym końcu potoku proces
+wysyła dane, zapisując je do potoku za pomocą systemowej funkcji
+write, natomiast na drugim końcu (inny) proces może je odczytywać
+używając funkcji read. Z mechanizmu potoków korzystaliśmy już w sposób
+niejawny, składając polecenia powłoki postaci:
+
+   $ who | grep cokolwiek
+
+Wewnątrz programu potok jest tworzony za pomocą funkcji systemowej o
+nazwie pipe. W przypadku pomyślnego zakończenia zwraca dwa deskryptory
+plików, jeden do zapisu do potoku i drugi do odczytu z potoku.
+Nagłówek funkcji znajduje się w pliku "<unistd.h>" i ma następującą
+postać:
+
+int pipe(int filedes[2])
+
+   "filedes" to tablica dwóch liczb całkowitych, pierwsza "filedes[0]"
+   to deskryptor odczytu z potoku, druga "filedes[1]" deskryptor
+   zapisu do potoku. Funkcja może zwrócić **-1**, gdy nie można
+   otworzyć nowych deskryptorów plików.
+
+[obraz]
+
+   #define MSGSIZE 16
+
+   char *msg1 = "hello, world #1";
+   char *msg2 = "hello, world #2";
+   char *msg3 = "hello, world #3";
+
+   main() {
+     char inbuf[MSGSIZE];
+     int p[2], j;
+
+     // otwieramy potok
+     if(pipe(p) == -1) {
+       perror("utworzenie potoku");
+       exit(1);
+     }
+
+     // piszemy do potoku
+     write(p[1], msg1, MSGSIZE);
+     write(p[1], msg2, MSGSIZE);
+     write(p[1], msg3, MSGSIZE);
+
+     // odczytujemy z potoku
+     for(j = 0; j < 3; j++) {
+       read(p[0], inbuf, MSGSIZE);
+       printf("%s\n", inbuf);
+     }
+     exit(0);
+   }
+
+W poprzednim przykładzie komunikaty zostały odczytane w takiej
+kolejności, w jakiej zostały zapisane. Potok traktuje dane jak kolejkę
+FIFO (= pierwszy na wejściu, pierwszy na wyjściu, ang. First In, First
+Out). Przedstawiony przykład prezentował komunikację potoku samego ze
+sobą. Prawdziwa wartość potoku staje się widoczna dopiero, gdy jest on
+użyty do komunikacji między różnymi procesami.
+
+[obraz]
+
+   char *msg1 = "hello, world #1";
+   char *msg2 = "hello, world #2";
+   char *msg3 = "hello, world #3";
+
+   main() {
+     char inbuf[MSGSIZE];
+     int p[2], j;
+     pid_t pid;
+
+     // otwieramy potok
+     if(pipe(p) == -1) {
+       perror("utworzenie potoku");
+       exit(1);
+     }
+     switch(pid = fork()) {
+     case -1:
+       perror("utworzenie procesu potomnego");
+       exit(2);
+     case 0: // potomek pisze do potoku
+       write(p[1], msg1, MSGSIZE);
+       write(p[1], msg2, MSGSIZE);
+       write(p[1], msg3, MSGSIZE);
+       break;
+     default: // rodzic czyta z potoku
+       for(j = 0; j < 3; j++) {
+         read(p[0], inbuf, MSGSIZE);
+         printf("%s\n", inbuf);
+       }
+       wait(NULL);
+     }
+     exit(0);
+   }
+
+Procesy z przykładu mają otwarte deskryptory pliku, pozwalające
+odczytywać z i zapisywać do potoku. Każdy z procesów może zapisywać do
+deskryptora p[1] i odczytywać z deskryptora pliku p[0]. Pojawia się tu
+problem: jeżeli oba procesy zaczną pisać do i czytać z potoku, może
+powstać zamieszanie. Dlatego, jeżeli proces tylko pisze, to powinien
+zamknąć kanał odczytu i na odwrót.
+
+Schemat komunikacji:
+
+[obraz]
+
+Potoki mają ograniczoną pojemność, tj. w potoku może znajdować się
+tylko pewna ilość bajtów. Minimalna ilość jest określona w standardzie
+POSIX jako 512 bajtów. W rzeczywistości (zwykle) systemy pozwalają na
+znacznie większe wartości. Znajomość maksymalnej wielkości potoku jest
+istotna, ponieważ wpływa na operacje zapisu i odczytu. Jeżeli
+zapisujemy do potoku, w którym jest dostateczna ilość miejsca, dane są
+wysyłane do potoku, a wywołanie funkcji "write" zwraca niezwłocznie.
+Jeżeli jednak wykonujemy zapis do potoku, który przepełnia potok,
+wykonanie procesu zostaje zawieszone, dopóty inny proces nie zrobi
+miejsca, odczytując dane z potoku. Jeżeli proces próbuje za pomocą
+pojedynczego write zapisać więcej danych, niż potok może otrzymać, to
+jądro zapisze do potoku tyle danych ile będzie mogło, następnie
+zawiesi wykonanie procesu, aż dostępne stanie się miejsce dla reszty
+danych. Zwykle zapis do potoku wykonuje się niepodzielnie.
+
+Co się dzieje, gdy deskryptor pliku, który reprezentuje jeden koniec
+potoku zostanie zamknięty? Możliwe są dwa przypadki:
+
+* Zamknięcie deskryptora pliku do zapisu. Jeżeli istnieją inne
+  procesy, które mają potok otwarty do zapisu, nic się nie dzieje.
+  Jeżeli jednak nie ma więcej procesów z otwartym tym potokiem do
+  zapisu, a potok jest pusty, każdy proces próbujący odczytać dane z
+  potoku wraca bez danych. Procesy, które w uśpieniu czekały na
+  odczyt, zostaną obudzone, a ich funkcje read zwrócą zero, tj. skutek
+  dla procesów czytających przypomina osiągnięcie końca zwykłego
+  pliku.
+
+* Zamknięcie deskryptora pliku do odczytu. Jeśli istnieją inne
+  procesy, mające potok otwarty do odczytu, to nic się nie zdarzy.
+  Jeśli nie istnieją, to do wszystkich procesów czekających na zapis
+  do potoku będzie przez jądro wysłany sygnał "SIGPIPE". Jeśli sygnał
+  nie zostanie przechwycony, proces zakończy się. Jeśli sygnał
+  zostanie przechwycony, po jego obsłudze, write zwróci -1, a zmienna
+  errno będzie zawierać "EPIPE". Do procesów piszących do potoku
+  później też wysyłany jest ten sygnał.
+
+
+Nieblokujące odczyty i zapisy
+=============================
+
+Poprzednie przykłady pokazały, że przy używaniu potoków zarówno
+odczyt, jak i zapis, mogą być zablokowane. Czasami nie jest to
+pożądane. Np. można chcieć, żeby program wykonał procedurę obsługi
+błędu lub przeglądał kilka potoków, aż otrzyma dane z jednego z nich.
+
+Jednym ze sposobów realizacji pow. zadań, jest następujące wywołanie
+funkcji "fcntl":
+
+   fcntl(filedes, F_SETFL, O_NONBLOCK);
+
+Jeżeli "filedes" jest deskryptorem potoku do zapisu, to następne
+wywołania funkcji "write" nie będą blokowane, nawet jeśli potok jest
+pełny. W zamian zwracają -1 i ustawiają "errno" na "EAGAIN". Jeżeli
+"filedes" jest dekryptorem pustego potoku do odczytu, to następne
+wywołania funkcji read nie będą blokowane, zwrócą wartości jak w
+przypadku write.
+
+
+Obsługa wielu potoków
+---------------------
+
+Przedstawiony mechanizm nieblokujących odczytów i zapisów jest dobry
+dla małych aplikacji. Operowanie jednocześnie na wielu potokach
+znacznie upraszcza użycie funkcji "select". Niech proces rodzicielski
+działa jako proces serwera z dowolną liczbą komunikujących się z nim
+procesów klienta (potomnych). Serwer musi poradzić sobie z sytuacją, w
+której informacja nadchodzi więcej niż jednym potokiem. Jeżeli nic nie
+nadchodzi, to proces serwera powinien się zablokować i czekać aż coś
+nadejdzie, ale bez ciągłego odpytywania. Gdy informacja nadchodzi
+więcej niż jednym potokiem, serwer musi wiedzieć, którymi potokami, by
+odczytać dane w prawidłowej kolejności. Zachowanie podobne do
+przedstawionego powyżej zapewnia funkcja select. Może być ona używana
+nie tylko do potoków ale także do zwykłych plików, terminali, plików
+"FIFO" i gniazd.
+
+
+Funkcja exec i potoki
+---------------------
+
+Pomiędzy dwoma programami na poziomie powłoki może być ustawiony
+potok, np.:
+
+   $ ls | wc
+
+Jak realizuje się takie potoki? Po pierwsze, powłoka wykorzystuje
+fakt, że otwarte deskryptory plików przechodzą otwarte przez wywołania
+funkcji exec. Oznacza to, że dwa deskryptory plików dla potoków
+otwarte przed kombinacją fork/exec pozostaną otwarte, kiedy proces
+potomny rozpocznie wykonywanie nowego programu.
+
+Po drugie, przed wywołaniem exec, powłoka łączy standardowe wyjście ls
+z końcem potoku przeznaczonym do zapisu i standardowe wejście wc z
+końcem do odczytu. Może to być zrobione za pomocą funkcji "fcntl" lub
+"dup2".
+
+
+Potoki nazwane = pliki FIFO
+===========================
+
+Potoki są eleganckim i silnym mechanizmem komunikacji między
+procesami, jednak posiadają pewne wady:
+
+* Potok może być używany do łączenia procesów, mających wspólnych
+  przodków. Staje się to uciążliwe, gdy chcemy napisać prawdziwy
+  proces serwera, na stałe działający w systemie.
+
+* Potoki nie mogą być trwałe. Muszą być tworzone za każdym razem, gdy
+  są potrzebne, i usuwane, gdy kończy się korzystający z nich proces.
+
+Problemy te rozwiązuje mechanizm komunikacji nazwany plikiem FIFO lub
+nazwanym potokiem. FIFO działa jak potok ale w odróżnieniu od potoków
+jest trwały i posiada nazwę i uprawnienia jak plik. Jednocześnie przy
+zapisie i odczycie wykazuje własności potoku.
+
+Plik FIFO tworzymy poleceniem mkfifo(). W starszych wersjach Unixa
+służyło do tego polecenie mknod().
+
+   #include <sys/types.h>
+   #include <sys/stat.h>
+
+   int mkfifo(const char *pathname, mode_t mode);

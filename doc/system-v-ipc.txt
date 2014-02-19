@@ -1,0 +1,14 @@
+
+System V IPC
+************
+
+* Czym jest IPC
+* System V
+* Identyfikatory IPC
+* Klucze IPC
+  * ipc_perm
+* Kolejki komunikatów
+  * Tworzenie kolejki komunikatów
+  * Używanie kolejki komunikatów
+* Semafory
+* Pamięć wspólna

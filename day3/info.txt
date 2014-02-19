@@ -1,0 +1,11 @@
+
+SigQ                        number of signals queued/max. number for queue
+SigPnd                      bitmap of pending signals for the thread
+ShdPnd                      bitmap of shared pending signals for the process
+SigBlk                      bitmap of blocked signals
+SigIgn                      bitmap of ignored signals
+SigCgt                      bitmap of catched signals
+
+
+
+http://stackoverflow.com/questions/2663456/write-a-signal-handler-to-catch-sigsegv

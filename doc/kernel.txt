@@ -1,0 +1,183 @@
+
+Linux Kernel
+************
+
+
+Linux jako system operacyjny czasu rzeczywistego
+================================================
+
+Opracowany przez Linusa Torvaldsa system operacyjny Linux jest obecnie
+rozwijany zgodnie z filozofią oprogramowania Open Source. Mimo iż
+początkowo był rozwijany z myślą o komputerach zgodnych z architekturą
+x86, obecnie wspiera różne architektury sprzętowe, takie jak:
+
+   * Power PC
+
+   * Advanced RISC Machines (ARM)
+
+   * Sparc
+
+   * MIPS
+
+   * Alpha
+
+Standardowy kernel linuksa od wersji 2.6 spełnia wymagania stawiane
+miękkim systemom czasu rzeczywistego. W szczególności możliwe jest
+wywłaszczanie procesów działających w trybie jądra (level 0 w trybie
+chronionym). Zmieniono również implementację *spinlock*, tak by
+umożliwić wywłaszczanie procesu czekającego.
+
+Powoduje to pewien narzut na pracę kernela i programów. Można tę opcję
+konfigurować w jądrze:
+
+[obraz]
+
+
+Kernel preemption
+=================
+
+W wersjach Linuksa przed 2.6.x procesy pracujące w trybie jądra nie
+mogły zostać wywłaszczone przez inny proces. W praktyce oznaczało to
+że powolny proces wywołujący wiele funkcji kernela mógł zatrzymać
+przełączanie innych zadań na relatywnie długi czas (kilkaset
+milisekund). Wykluczało to aplikacje typu soft real-time (obróbka
+dźwięku lub obrazu). Poprawki wprowadzone w jądrze 2.6 i późniejszych
+umożliwiły zawieszenie pracy procesu pracującego w trybie jądra, a tym
+samym Linuks stał się systemem zbliżonym do RTOS. Przerwania powinny
+zostać obsłużone w dobrze zdefiniowanym czasie od ich wywołania.
+
+Niestety wiąże się to z koniecznością zapewnienia spójności danych dla
+programów/sterowników jądra. Istnieją więc momenty, w których
+wywłaszczenie **nie może** nastąpić. Należy więc newralgiczne punkty
+kodu chronić - używając specjalnych blokad ("preempt_enable()",
+"preempt_disable()"). Po zwolnieniu blokad, można proces wywłaszczyć.
+Wywłaszczenie jądra może również nastąpić explicite: jeśli proces
+znajdujący się w jądrze zasypia lub wywoła funkcję "schedule()".
+
+
+RT-Preempt Patch
+----------------
+
+Istnieje możliwość przekształcenia jądra linuksa w system spełniający
+wymagania ostrych ograniczeń czasowych (*hard real-time*) za pomocą
+łatki RT_Preempt https://rt.wiki.kernel.org/
+
+   Controlling a laser with Linux is crazy, but everyone in this room
+   is crazy in his own way. So if you want to use Linux to control an
+   industrial welding laser, I have no problem with your using
+   PREEMPT_RT.
+
+   -- Linus Torvalds
+
+[obraz]
+
+Łatka ta przekształca jądro w system w pełni wywłaszczalny (*fully
+preemptible kernel*).
+
+
+Ćwiczenie - patchowanie i aktualizacja jądra debiana
+----------------------------------------------------
+
+Najpierw pobieramy niezbędne do dalszej pracy pakiety
+
+   apt-get install fakeroot kernel-package libncurses5-dev
+
+Oraz nową wersję jądra i łatki:
+
+   wget https://www.kernel.org/pub/linux/kernel/v3.x/linux-3.12.8.tar.xz
+   wget https://www.kernel.org/pub/linux/kernel/ \
+        projects/rt/3.12/patch-3.12.8-rt11.patch.xz
+
+Aplikujemy łatkę:
+
+   tar -xvf linux-3.12.8.tar.xz
+   cd linux-3.12.8
+   xzcat ../patch-3.12.8-rt11.patch.xz | patch -p1
+
+Następnie budujemy jądro korzystając z poprzedniej konfiguracji:
+
+   cp /boot/config-`uname –r`.config
+   make menuconfig
+   make-kpkg clean
+   sudo fakeroot make-kpkg -j4 --initrd kernel_image kernel_headers
+
+Uzyskane pakiety instalujemy przy użyciu "dpkg".
+
+
+Real-Time Schedulers
+====================
+
+Jądro linuksa definiuje schedulery używane przez procesy RT.
+
+   #define SCHED_FIFO              1
+   #define SCHED_RR                2
+
+"SCHED_FIFO"
+   Proces taki jest szeregowany zgodnie z zasadą kolejki prostej tzn.
+   nie może być wywłaszczony przez proces z tej samej kolejki
+   koncepcyjnej. Gdy proces taki zostanie wywłaszczony przez proces o
+   wyższym priorytecie, procesor zostanie mu zwrócony gdy nie będzie
+   procesów o wyższym priorytecie gotowych do działania. Proces
+   wędruje na koniec kolejki gdy zrzeknie się procesora lub zaśnie.
+
+"SCHED_RR"
+   Usprawnienie schedulera "SCHED_FIFO". Procesy są szeregowane w
+   obrębie kolejki koncepcyjnej zgodnie z algorytmem Round-Robin.
+   Procesom z tej grupy przyznawany jest kwant czasu dostępu do
+   procesora. Po zużyciu kwantu czasu proces zostaje przeniesiony na
+   koniec swojej kolejki i otrzymuje nowy kwant czasu.
+
+Powyższych schedulerów używają procesy o priorytetach 1-99 (gdzie 99
+oznacza najwyższy priorytet). Pozostałe (zwykłe) procesy używają
+priorytetów 100-139 (te priorytety ustawia komenda "nice"). Aktualne
+szczegóły można znaleźć na:
+
+   man 2 sched_setscheduler
+
+Aby móc nadawać wątkom priorytety real-time należy obniżyć limity
+bezpieczeństwa
+
+   twoj_ulubiony_edytor /etc/security/limits.d/99-rt.conf
+
+w którym ustawiamy limity dla grupy "realtime":
+
+   @realtime   -  rtprio     99
+   @realtime   -  memlock    unlimited
+
+a następnie tworzymy tę grupę i dodajemy naszego użytkownika:
+
+   groupadd realtime
+   usermod -a -G realtime twoja_nazwa
+
+Od tej pory możemy zmieniać priorytety przy pomocy
+
+   sched_setscheduler(getpid(), SCHED_FIFO, &sp)
+
+lub
+
+   chrt -p PRIORYTET PID
+   man chrt
+
+
+Cycletest
+---------
+
+   sudo ./cyclictest -a -t -n -p99
+
+Na systemie, który nie jest RT:
+
+   T: 0  Min:      5 Act:   10 Avg:   14 Max:   39242
+   T: 1  Min:      4 Act:   10 Avg:   17 Max:   39661
+
+Na systemie RT:
+
+   T: 0  Min:      7 Act:   10 Avg:   10 Max:      18
+   T: 1  Min:      7 Act:    8 Avg:   10 Max:      22
+
+Ostatnia kolumna wskazuje na najgorszy przypadek.
+
+
+Inwersja priorytetów - *priority inversion*
+-------------------------------------------
+
+[obraz]

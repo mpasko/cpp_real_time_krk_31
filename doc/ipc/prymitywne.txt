@@ -1,0 +1,85 @@
+
+Prymitywne sposoby komunikacji między procesami
+***********************************************
+
+
+Pliki blokujący
+===============
+
+Najprostszy sposób komunikacji między procesami. Obiektami
+zaangażowanymi w komunikację mogą być odrębne procesy lub tylko różne
+instance tego samego programu. Z teoretycznego punktu widzenia
+rozwiązanie komunikacja za pomocą pliku jest bardzo proste. Stosujące
+ujednoliconą, wspólną konwencję nazywania plików, określony proces
+sprawdza istnienie w ustalonym miejscu pliku blokującego. Jeśli plik
+jest obecny to proces czeka, w przeciwnym razie wykonuje operacje.
+
+Użyteczne funkcje:
+
+   #include <sys/types.h>
+   #include <sys/stat.h>
+   #include <fcntl.h>
+
+   int open(const char *pathname, int flags);
+   int open(const char *pathname, int flags, mode_t mode);
+   int creat(const char *pathname, mode_t mode);
+
+
+   #include <unistd.h>
+   int unlink(const char *pathname);
+
+
+   #include <unistd.h>
+   unsigned int sleep(unsigned int seconds);
+
+
+Blokowanie plików
+=================
+
+Korzystanie z tej metody blokady jest możliwe, dzięki standardowym
+procedurom zaimplementowanym w systemie operacyjnym. Linux jako system
+wielozadaniowy, umożliwia blokowanie rekordów. Ponieważ nie ma żadnego
+ograniczenia na strukturę blokowanego rekordu należącego do pliku,
+rekord(segment) uznaje się za pewien ciągły fragment o ustalonym
+początku i długości. Jeśli początkiem rekordu będzie początek pliku, a
+jako długość rekordu długość całego pliku, to wtedy zostanie
+zablokowany cały plik.
+
+Przydatne funkcje:
+
+   #include <unistd.h>
+   #include <fcntl.h>
+
+   int fcntl(int fd, int cmd, ... /* arg */ );
+
+Trzeci argument "fcntl" jest opcjonalny dla niektórych operacji. W
+przypadku operacji na blokadach rekordów i plików przekazuje się w nim
+strukturę "struc flock"
+
+   struct flock {
+       ...
+       short l_type;    /* typ blokady: F_RDLCK, F_WRLCK, F_UNLCK */
+       short l_whence;  /* sposób interpretacji pola l_start:
+                        /* SEEK_SET, SEEK_CUR, SEEK_END */
+       off_t l_start;   /* przesunięcie */
+       off_t l_len;     /* długość, 0 == koniec pliku */
+       pid_t l_pid;     /* PID procesu skojarzonego z plikiem
+                          (tylko dla F_GETLK) */
+       ...
+   };
+
+Inna funkcja umożliwiająca zarządzanie bloadami to "flock"
+
+   #include <sys/file.h>
+
+   int flock(int fd, int operation);
+
+Flagi dla operacji:
+
+* LOCK_SH  Ustanowienie blokady współdzielona.
+
+* LOCK_EX  Ustanowienie blokady na wyłączność.
+
+* LOCK_UN  Zniesienie blokady.
+
+* LOCK_NB  Operacja jest nieblokująca.

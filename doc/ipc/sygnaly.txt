@@ -1,0 +1,601 @@
+
+Sygnały
+*******
+
+Sygnały dostarczają prostej metody przekazywania przerwań programowych
+do procesu. Z powodu swojej natury, sygnały są używane raczej do
+obsługi nietypowych sytuacji, a nie do prostego przesyłania danych
+pomiędzy procesami. Proces może zrobić z sygnałem następujące rzeczy:
+
+* Wybrać sposób reakcji po otrzymaniu sygnału (obsługa sygnału)
+
+* Blokować sygnał, tj. pozostawić go na później; dotyczy krytycznych
+  fragmentów kodu
+
+* Wysłać sygnał do innego procesu
+
+
+Nazwy sygnałów
+==============
+
+Sygnały nie mogą bezpośrednio przenosić informacji, co ogranicza ich
+użyteczność jako ogólnego mechanizmu komunikacji między procesami.
+Jadnak każdy typ sygnału posiada nadaną mnemoniczną nazwę, wskazującą
+cel w jakim sygnał jest zwykle używany. Nazwy sygnałów są zdefiniowane
+w pliku nagłówkowym "<signal.h>". Większość sygnałów Unixowych jest
+przeznaczona do użycia przez jądro, chociaż istnieje również kilka do
+przesyłania między zwykłymi procesami.
+
+Oto kilka wybranych, najczęściej używanych sygnałów:
+
+* **SIGABRT** sygnał przerwania procesu wysyłany przez bieżący proces
+  za pomocą funkcji abort. Obsługa tego sygnału powinna się zakończyć
+  tzw. zakończeniem anormalnym. W rzeczywistości następuje zrzut
+  rdzenia (*core dump*) do pliku w celu dalszej analizy.
+
+* **SIGALRM** tzw. zegar alarmu. Wysyłany do procesu przez jądro, gdy
+  upłynie ustalony czas. Wszystkie procesy mają w sumie do dyspozycji
+  trzy czasomierze. Czasomierz jest ustawiany przez proces za pomocą
+  funkcji alarm.
+
+* **SIGCHLD** proces potomny zakończony lub zatrzymany. Zawsze, gdy
+  proces potomny kończy się lub zatrzymuje, jądro zawiadamia o tym
+  jego proces rodzicielski, wysyłając mu ten sygnał. Domyślnie proces
+  rodzicielski ignoruje sygnał, więc jeżeli chce wiedzieć o każdym
+  ukończonym procesie, musi jawnie przechwytywać sygnał.
+
+* **SIGCONT** kontynuuj proces, jeżeli był zatrzymany. Jest to sygnał
+  sterowania pracą, który powinien wznowić proces, jeżeli został
+  zatrzymany. W przeciwnym przypadku proces powinien ignorować sygnał.
+  Stanowi on przeciwieństwo sygnału SIGSTOP.
+
+* **SIGFPE** wyjątek zmiennoprzecinkowy. Wysyłany przez jądro, gdy
+  wystąpi błąd obliczeń zmiennoprzecinkowych, np. nadmiar lub
+  niedomiar. Powoduje anormalne zakończenie.
+
+* **SIGINT** przerwanie. Wysyłany przez jądro do wszystkich procesów
+  powiązanych z sesją terminala, gdy użytkownik wciśnie klawisz
+  przerwania (*Ctrl-c*). Jest to powszechnie stosowany sposób
+  zatrzymania działającego programu.
+
+* **SIGHUP** sygnał zawieszenia. Wysyłany przez jądro do wszystkich
+  procesów powiązanych z terminalem sterującym, jeśli zostaje on
+  odłączony. Wysłany także do wszystkich członków sesji, gdy kończy
+  się proces wiodący sesji, którym zwykle jest proces powłoki, pod
+  warunkiem, że sesja jest powiązana z terminalem sterującym. Dzięki
+  temu, po wylogowaniu użytkownika, jego procesy działające w tle są
+  kończone (o ile nie wyłączono obsługi tego sygnału).
+
+* **SIGILL** nielegalna instrukcja. Wysyłany przez system, gdy proces
+  próbuje wykonać nielegalna instrukcję. Staje się to możliwe, gdy
+  program uszkodzi swój własny kod lub próbuje wykonać instrukcję
+  zmiennoprzecinkową bez odpowiedniego wsparcia sprzętowego. Sygnał
+  powoduje anormalne zakończenie procesu.
+
+* **SIGKILL** usunięcie. Specjalny sygnał wysyłany do jednego procesu
+  przez inny, aby usunąć odbiorcę. Jest on także czasem wysyłany przez
+  system, np. podczas zamykania systemu. Jest to jeden z dwóch
+  sygnałów, które nie mogą być zignorowane lub przechwycone, tj.
+  obsłużone przez procedurę zdefiniowaną przez użytkownika.
+
+* **SIGSTOP** zatrzymanie wykonania. Jest to sygnał kontroli zdarzeń,
+  który zatrzymuje proces. Podobnie jak SIGKILL, nie może zostać
+  przechwycony lub zignorowany.
+
+* **SIGTERM** programowy sygnał zakończenia. Zwyczajowo jest używany
+  do kończenia procesu. Programista może użyć tego sygnału, aby dać
+  procesowi trochę czasu na działania porządkujące przed wysłaniem
+  sygnału SIGKILL.
+
+* **SIGUSR1** i **SIGUSR2** podobnie jak SIGTERM, sygnały te nigdy nie
+  są wysyłane przez jądro. Mogą być wykorzystane przez użytkownika w
+  dowolnym celu.
+
+
+Obsługa sygnałów
+================
+
+Po otrzymaniu sygnału proces ma do wyboru jeden z trzech sposobów
+działania:
+
+* Podejmij działania domyślne, stosowne do otrzymanego sygnału
+
+* Zignoruj sygnał całkowicie i kontynuuj przetwarzanie
+
+* Podejmij działania zdefiniowane przez użytkownika
+
+W starszych wersjach Unixa obsługa sygnałów była względnie prosta,
+choć czasem zawodziła. Nowe procedury, które przedstawimy, są bardziej
+niezawodne i jednocześnie bardziej złożone.
+
+Jednym z głównych parametrów przekazywanych do funkcji systemowych
+obsługujących sygnały są tzw. zestawy sygnałów. Określają one listy
+sygnałów, z którymi chcemy coś zrobić. Zestawy sygnałów są definiowane
+za pomocą typu "sigset_t", zdefiniowanego w pliku nagłówkowym
+"<signal.h>". Typ ten jest wystarczająco pojemny, aby zapamiętać
+reprezentację wszystkich zdefiniowanych w systemie sygnałów.
+
+
+Zestawy sygnałów
+================
+
+Użytkownik może definiować zestawy potrzebnych mu sygnałów za pomocą
+następujących funkcji:
+
+ sigemptyset(sigset_t* set)
+
+int sigfillset(sigset_t* set)
+
+Pierwsza z funkcji inicjuje zestaw funkcji, wskazywany przez "set"
+tak, że wszystkie sygnały są wyłączone, natomiast druga inicjuje
+zestaw funkcji, wskazywany przez set tak, że wszystkie sygnały są
+włączone.
+
+Kolejne funkcje to:
+
+ sigaddset(sigset_t* set, int signo)
+
+int sigdelset(sigset_t* set, int signo)
+
+Funkcje te, odpowiednio, dodają do i usuwają z zestawu sygnałów
+wskazywanego przez "set", sygnał "signo". Zalecane jest by parametr
+"signo" był nazwą sygnału, taką jak np. "SIGINT". Podanie
+rzeczywistego numeru sygnału jest możliwe ale niezalecane ze względu
+na przenośność kodu.
+
+
+Ustalanie działania sygnału
+---------------------------
+
+Po zdefiniowaniu zestawu sygnałów można wybrać konkretną metodę
+obsługi sygnałów używając funkcji:
+
+int sigaction(int signo, const struct sigaction *act, const struct sigaction *oact)
+
+Parametr "signo" identyfikuje sygnał, dla którego chcemy określić
+działanie. Może to być dowolny sygnał, z wyjątkiem SIGSTOP i SIGKILL.
+Drugi parametr określa działanie, jakie chcemy ustawić dla *signo*.
+Trzeci parametr jest ustawiany na NULL lub na aktualne ustawienia.
+
+Struktura sigaction składa się z następujących pól:
+
+   struct sigaction {
+       void     (*sa_handler)(int);
+       void     (*sa_sigaction)(int, siginfo_t *, void *);
+       sigset_t   sa_mask;
+       int        sa_flags;
+       void     (*sa_restorer)(void);
+    };
+
+* "sa_handler" -    identyfikuje działanie, jakie ma być podjęte po
+  otrzymaniu sygnału. Może przyjmować jedną z następujących wartości:
+  "SIG_DFL" domyślne działanie systemu, "SIG_IGN" zignoruj ten sygnał
+  (nie dla SIGSTOP i SIGKILL) albo adres funkcji wywoływanej po
+  otrzymaniu sygnału. Sygnał zostanie przekazany do funkcji jako jej
+  argument.
+
+* sigset_t sa_mask maska sygnałów, które powinny być blokowane podczas
+  wywoływania funkcji sa_handler. Dodatkowo, sygnał, który wywołał
+  funkcję będzie zablokowany (dodany do sa_mask), chyba że użyto flagę
+  "SA_NODEFER" lub "SA_NOMASK". Blokowanie przekształca sygnały w
+  bardziej, ale nie całkowicie, godny zaufania mechanizm komunikacji.
+
+* int sa_flags zbiór flag, które modyfikują zachowanie procesu obsługi
+  sygnałów. Jest to zbiór wartości połączonych bitowym OR.
+
+
+Sygnały a funkcje systemowe
+===========================
+
+W większości przypadków, jeżeli do procesu wysyłany jest sygnał w
+chwili, gdy wykonuje on funkcję systemową, sygnał nie odnosi żadnego
+skutku, dopóki funkcja się nie skończy. Jednak kilka funkcji
+systemowych zachowuje się inaczej i mogą być przerwane przez sygnał.
+Dotyczy to funkcji read, write i open w odniesieniu do powolnych
+urządzeń takich, jak: terminal, ale już nie plik dyskowy, oraz funkcji
+wait i pause. We wszystkich tych przypadkach przerwana funkcja
+systemowa zwraca -1 i umieszcza EINTR w zmiennej errno.
+
+Sygnały systemów Unixowych zwykle nie mogą być odkładane na stosie.
+Ściślej, dla danego procesu w danej chwili nie może istnieć więcej niż
+jeden zaległy sygnał danego typu, chociaż może występować więcej niż
+jeden zaległy typ sygnałów. Z tego względu nie powinno się używać
+sygnałów jako godnej zaufania metody komunikacji.
+
+
+Blokowanie sygnałów
+===================
+
+Jeżeli program wykonuje odpowiedzialne zadanie, np. aktualizuje bazę
+danych, należałoby go zabezpieczyć przed przerwaniami w kluczowych
+sytuacjach. Zamiast ignorowania wszystkich nadchodzących sygnałów
+proces może blokować sygnały. Oznacza to, że nie będą one obsługiwane,
+dopóki proces nie zakończy swojej krytycznej operacji. Funkcją
+systemową pozwalającą procesowi zablokować konkretny sygnał jest:
+
+int sigprocmask(int how, const sigset_t* set, const sigset_t* oset)
+
+Parametr "how" informuje jakie działanie wykonać, np. "SIG_SETMASK"
+oznacza blokowanie sygnałów ustawionych w drugim parametrze set.
+Trzeci parametr jest wypełniany bieżącą maską blokowanych sygnałów.
+
+
+Wysyłanie sygnałów
+==================
+
+Do wysyłania sygnałów do procesów służy funkcja:
+
+int kill(pid_t pid, int sig)
+
+   Pierwszy parametr pid określa proces albo procesy, do których
+   będzie wysłany sygnał sig. Ponieważ proces, który wywołuje  funkcja
+   kill musi znać PID procesu, do którego wysyła sygnał, funkcji kill
+   używa się najczęściej między procesami powiązanymi, np. procesem
+   rodzicielskim i potomnym. Warto też zauważyć, że proces może
+   wysyłać sygnał do samego siebie. Proces może wysyłać sygnały tylko
+   do takich procesów, których RIUD lub EUID jest taki sam, co procesu
+   wysyłającego. Jak zwykle, proces administratora może wysyłać
+   sygnały do wszystkich procesów. Jeżeli proces zwykłego użytkownika
+   wysyła sygnał do procesu innego użytkownika, to funkcja kill zwraca
+   -1 i umieszcza wartość EPERM w errno. Inne możliwości, to ESRCH:
+   nie ma takiego procesu i EINVAL: sig nie jest ważnym numerem
+   sygnału
+
+Parametr *pid* funkcji "kill" może przybierać następujące wartości:
+
+* Jeżeli pid jest równy **0**, sygnał będzie wysłany do wszystkich
+  procesów, które należą do tej samej grupy procesów co nadawca.
+  Dotyczy to również nadawcy.
+
+* Jeżeli pid jest równy **-1**, a efektywny "EUID" nie jest
+  administratorem, wtedy sygnał zostanie wysłany do wszystkich
+  procesów z "RUID" równym "EUID" nadawcy. Ponownie dotyczy to również
+  nadawcy.
+
+* Jeżeli pid jest równy **-1**, a efektywny "EUID" jest
+  administratorem, wtedy sygnał zostanie wysłany do wszystkich
+  procesów z wyjątkiem pewnych specjalnych procesów systemowych.
+
+* Jeżeli pid jest mniejszy niż **0**, ale różny od **-1**, wtedy
+  sygnał zostanie wysłany do wszystkich procesów z GUID równym
+  bezwzględnej wartości pid. Dotyczy również nadawcy, jeśli jego
+  "GUID" spełnia ten warunek.
+
+
+Wysyłanie sygnałów do siebie
+============================
+
+Do wysyłania sygnału do procesu wywołującego służy funkcja:
+
+int raise(int sig)
+
+Sygnał o numerze "sig" jest wysyłany do procesu wywołującego. W
+przypadku powodzenia funkcja zwraca 0.
+
+Do ustawiania zegara alarmu procesu służy funkcja:
+
+int alarm(unsigned int sec)
+
+Parametr "sec" podaje czas w sekundach do alarmu. Kiedy czas upłynie,
+do procesu zostanie wysłany sygnał "SIGALRM". Funkcja ta nie powoduje
+zawieszenia działania procesu, jak "sleep()", proces kontynuuje
+wykonanie, przynajmniej do otrzymania sygnału. Aktywny zegar alarmu
+przedostaje się także przez wywołanie "exec()", natomiast wywołanie
+funkcji "fork()" wyłącza zegar alarmu w procesie potomnym. Alarm może
+być wyłączony za pomocą wywołania funkcji "alarm(0)", ponieważ
+wywołania tej funkcji nie są odkładane na stosie, tj. drugie wywołanie
+zastąpi pierwsze. Jednak zwracany jest wówczas czas pozostający do
+poprzedniego alarmu.
+
+
+Funkcja systemowa "pause"
+=========================
+
+Systemy Unixowe dostarczają również funkcji systemowej:
+
+int pause(void)
+
+Funkcja ta zawiesza wywołujący proces, aż do otrzymania dowolnego
+sygnału. Jeżeli sygnał powoduje normalne zakończenie, wtedy zdarzy się
+tylko to. Jeżeli sygnał jest ignorowany przez proces, "pause()"
+ignoruje go również. Jeżeli jednak sygnał jest przechwytywany, to gdy
+kończy się procedura obsługi przerwania, funkcja zwraca -1 i umieszcza
+EINTR w "errno".
+
+Funkcje które można bezpiecznie wywoływać w handlerze odbsługi
+sygnału:
+
+   _Exit()                   _exit()                   abort()
+   accept()                  access()                  aio_error()
+   aio_return()              aio_suspend()             alarm()
+   bind()                    cfgetispeed()             cfgetospeed()
+   cfsetispeed()             cfsetospeed()             chdir()
+   chmod()                   chown()                   clock_gettime()
+   close()                   connect()                 creat()
+   dup()                     dup2()                    execle()
+   execve()                  fchmod()                  fchown()
+   fcntl()                   fdatasync()               fork()
+   fpathconf()               fstat()                   fsync()
+   ftruncate()               getegid()                 geteuid()
+   getgid()                  getgroups()               getpeername()
+   getpgrp()                 getpid()                  getppid()
+   getsockname()             getsockopt()              getuid()
+   kill()                    link()                    listen()
+   lseek()                   lstat()                   mkdir()
+   mkfifo()                  open()                    pathconf()
+   pause()                   pipe()                    poll()
+   posix_trace_event()       pselect()                 raise()
+   read()                    readlink()                recv()
+   recvfrom()                recvmsg()                 rename()
+   rmdir()                   select()                  sem_post()
+   send()                    sendmsg()                 sendto()
+   setgid()                  setpgid()                 setsid()
+   setsockopt()              setuid()                  shutdown()
+   sigaction()               sigaddset()               sigdelset()
+   sigemptyset()             sigfillset()              sigismember()
+   sleep()                   signal()                  sigpause()
+   sigpending()              sigprocmask()             sigqueue()
+   sigset()                  sigsuspend()              sockatmark()
+   socket()                  socketpair()              stat()
+   symlink()                 sysconf()                 tcdrain()
+   tcflow()                  tcflush()                 tcgetattr()
+   tcgetpgrp()               tcsendbreak()             tcsetattr()
+   tcsetpgrp()               time()                    timer_getoverrun()
+   timer_gettime()           timer_settime()           times()
+   umask()                   uname()                   unlink()
+   utime()                   wait()                    waitpid()
+
+Przykłady zgodnej i niezgodnej obsługi sygnałów:
+
+Zgodnie:
+
+   #include <signal.h>
+   #include <stdio.h>
+   #include <stdlib.h>
+
+   enum { MAXLINE = 1024 };
+   char *info = NULL;
+
+   void log_message(void) {
+     fprintf(stderr, info);
+   }
+
+   void handler(int signum) {
+     log_message();
+     free(info);
+     info = NULL;
+   }
+
+   int main(void) {
+     if (signal(SIGINT, handler) == SIG_ERR) {
+       /* Handle error */
+     }
+     info = (char *)malloc(MAXLINE);
+     if (info == NULL) {
+       /* Handle Error */
+     }
+
+     while (1) {
+       /* Main loop program code */
+
+       log_message();
+
+       /* More program code */
+     }
+     return 0;
+   }
+
+Niezgodnie:
+
+   #include <signal.h>
+   #include <stdio.h>
+   #include <stdlib.h>
+
+   enum { MAXLINE = 1024 };
+   volatile sig_atomic_t eflag = 0;
+   char *info = NULL;
+
+   void log_message(void) {
+     fprintf(stderr, info);
+   }
+
+   void handler(int signum) {
+     eflag = 1;
+   }
+
+   int main(void) {
+     if (signal(SIGINT, handler) == SIG_ERR) {
+       /* Handle error */
+     }
+     info = (char *)malloc(MAXLINE);
+     if (info == NULL) {
+       /* Handle error */
+     }
+
+     while (!eflag) {
+       /* Main loop program code */
+
+       log_message();
+
+       /* More program code */
+     }
+
+     log_message();
+     free(info);
+     info = NULL;
+
+     return 0;
+   }
+
+Niezgodnie:
+
+   #include <setjmp.h>
+   #include <signal.h>
+   #include <stdlib.h>
+
+   enum { MAXLINE = 1024 };
+   static jmp_buf env;
+
+   void handler(int signum) {
+     longjmp(env, 1);
+   }
+
+   void log_message(char *info1, char *info2) {
+     static char *buf = NULL;
+     static size_t bufsize;
+     char buf0[MAXLINE];
+
+     if (buf == NULL) {
+       buf = buf0;
+       bufsize = sizeof(buf0);
+     }
+
+     /*
+      * Try to fit a message into buf, else reallocate
+      * it on the heap and then log the message.
+      */
+
+     /*** VULNERABILITY IF SIGINT RAISED HERE ***/
+
+     if (buf == buf0) {
+       buf = NULL;
+     }
+   }
+
+   int main(void) {
+     if (signal(SIGINT, handler) == SIG_ERR) {
+       /* Handle error */
+     }
+     char *info1;
+     char *info2;
+
+     /* info1 and info2 are set by user input here */
+
+     if (setjmp(env) == 0) {
+       while (1) {
+         /* Main loop program code */
+         log_message(info1, info2);
+         /* More program code */
+       }
+     } else {
+       log_message(info1, info2);
+     }
+
+     return 0;
+   }
+
+Zgodnie:
+
+   #include <signal.h>
+   #include <stdlib.h>
+
+   enum { MAXLINE = 1024 };
+   volatile sig_atomic_t eflag = 0;
+
+   void handler(int signum) {
+     eflag = 1;
+   }
+
+   void log_message(char *info1, char *info2) {
+     static char *buf = NULL;
+     static size_t bufsize;
+     char buf0[MAXLINE];
+
+     if (buf == NULL) {
+       buf = buf0;
+       bufsize = sizeof(buf0);
+     }
+
+     /*
+      * Try to fit a message into buf, else reallocate
+      * it on the heap and then log the message.
+      */
+     if (buf == buf0) {
+       buf = NULL;
+     }
+   }
+
+   int main(void) {
+     if (signal(SIGINT, handler) == SIG_ERR) {
+       /* Handle error */
+     }
+     char *info1;
+     char *info2;
+
+     /* info1 and info2 are set by user input here */
+
+     while (!eflag) {
+       /* Main loop program code */
+       log_message(info1, info2);
+       /* More program code */
+     }
+
+     log_message(info1, info2);
+
+     return 0;
+   }
+
+Niezgodnie:
+
+   #include <signal.h>
+   #include <stdlib.h>
+
+   void term_handler(int signum) {
+     /* SIGTERM handling specific */
+   }
+
+   void int_handler(int signum) {
+     /* SIGINT handling specific */
+     if (raise(SIGTERM) != 0) {
+       /* Handle error */
+     }
+   }
+
+   int main(void) {
+     if (signal(SIGTERM, term_handler) == SIG_ERR) {
+       /* Handle error */
+     }
+     if (signal(SIGINT, int_handler) == SIG_ERR) {
+       /* Handle error */
+     }
+
+     /* Program code */
+     if (raise(SIGINT) != 0) {
+       /* Handle error */
+     }
+     /* More code */
+
+     return EXIT_SUCCESS;
+   }
+
+Niezgodnie:
+
+   #include <signal.h>
+   #include <stdlib.h>
+
+   void term_handler(int signum) {
+     /* SIGTERM handling specific */
+   }
+
+   void int_handler(int signum) {
+     /* SIGINT handling specific */
+     /* Pass control to the term handler */
+     term_handler(SIGTERM);
+   }
+
+   int main(void) {
+     if (signal(SIGTERM, term_handler) == SIG_ERR) {
+       /* Handle error */
+     }
+     if (signal(SIGINT, int_handler) == SIG_ERR) {
+       /* Handle error */
+     }
+
+     /* Program code */
+     if (raise(SIGINT) != 0) {
+       /* Handle error */
+     }
+     /* More code */
+
+     return EXIT_SUCCESS;
+   }

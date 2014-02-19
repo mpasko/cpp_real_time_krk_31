@@ -1,0 +1,95 @@
+
+Semafory
+********
+
+Semafor jest sposobem komunikacji który pozwala na współdzielenie
+danych można traktować go jako rodzaj licznika który informuje proces
+o zajętości danego zasobu czy danej. Typowe użycie semafora wygląda
+następująco : sprawdzamy czy wartość semafora jest dodatnia jeśli tak
+odejmujemy od niego 1 informując że chcemy użyć zasobu. Jeśli trafimy
+na moment w którym semafor ma wartość 0 to chcąc użyć zasobu musimy
+czekać aż nie stanie się dostepny - wartość semafora > 0. Jeśli
+zakończyliśmy używanie zasobu to zwiększamy wartość semafora o 1
+
+W systemie V semafory są to właściwie zbiory semaforów tzn zbiory
+jednej lub więcej dodatniej (początkowo) wartości. System przechowuje
+informację o semaforze w strukturze typu``semid_ds``
+
+   struct semid_ds {
+      struct ipc_perm sem_perm;
+      time_t sem_otime;      /* czas ostatniej operacji */
+      time_t sem_ctime;      /* czas ostatniej zmiany */
+      struct sem *sem_base;  /* wksaznik do pierwszego semafora w danym zbiorze */
+      ushort sem_nsems;      /* liczba semaforów w zbiorze */
+   };
+
+Aby uzyskać identyfikator zbioru semaforów używamy funkcji
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/sem.h>
+
+   int semget(key_t key, int nsems, int semflg);
+
+Parametr "key" oznacza to samo co w przypadku tworzenia kolejek i tak
+samo należy go stosować. Jeśli tworzymy nowy zbiór semaforów to
+parametr nsems oznacza liczbę semaforów w nowym zbiorze.
+
+Kolejną funkcją do obsługi semaforów jest semctl jej użycie jest
+podobne do msgctl jeśli uzyjemy flag "IPC_STAT", "IPC_SET" lub
+"IPC_RMID" jej ostatni parametr jest unią:
+
+   union semun {
+     int val;               /* tylko dla SETVAL */
+     struct semid _ds *buf; /* dla IPC_SET i IPC_STAT */
+     ushort *array;         /* dla GETALL i SETALL */
+   }
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include vsys/sem.h>
+
+   int semctl (int semid, int semnum, int cmd, union semun arg) ;
+
+ponadto dostępnych jest kilka innych operacji:
+
+* "GETVAL" - pozwala pobrać wartość semafora dla elemntu semnum
+
+* "SETVAL" - pozwala ustawić wartość semafora dla elemntu semnum na
+  wartość podaną w arg.val
+
+* "GETPID" - pozwala pobrać wartość pid procesu który realizował
+  ostatnia operacje na semaforze
+
+* "GETALL" - pozwala pobrać wartość wszystkich semaforów ze zbioru do
+  tablicy arg.array
+
+* "SETALL" - pozwala ustawić wartość wszystkich semaforów ze zbioru na
+  wartość z tablicy arg.array
+
+Kolejną funkcją do obsługi semaforów jest funkcja semop
+
+   #include <sys/types.h>
+   #include <sys/ipc.h>
+   #include <sys/sem.h>
+   int semop ( int semid, struct sembuf *semoparray, size_t nops) ;
+
+Pozwala ona na operacje na naszym zbiorze semaforów Każda operacja
+musi być opisana za pomocą struktury "sembuf", "semoparray" jest
+wskaźnikem na tablice takich struktur a "nops" liczba jej elementów.
+
+   struct sembuf {
+     ushort sem_num; /* numer semafora w zbiorze (0, 1, . . . , nsem-1) */
+     short sem_op;   /* operacja na semaforze (wartość ujemna, wartość dodatnia */
+     short sem_flg;  /* flagi IPC_NOWAIT, SEM_UNDO */
+   };
+
+Jeśli "sem_op > 0" to semop jest dodawana do semafora. Jeśli jest
+ujemna to jest to żądanie zasobu strzeżonego przez semafor i jeśli
+odpowiednia wartość semafora jest wieksza lub rowna sem_op to jest ona
+od niej odejmowana, jesli nie proces sie blokuje i czeka az
+odpowiednia wartosc bedzie dostępna chyba ze podalismy flagę
+"IPC_NOWAIT" wtedy funkcja konczy sie bledem. Jeśli "sem_op = 0" to
+znaczy ze chcemy oczekiwac na wartosc zerową semafora analogicznie jak
+wyżej można użyć "IPC_NOWAIT". Jeśli użyjemy flagi "SEM_UNDO" to po
+skończeniu procesu wszelkie nie wycofane operacje wycofa system.

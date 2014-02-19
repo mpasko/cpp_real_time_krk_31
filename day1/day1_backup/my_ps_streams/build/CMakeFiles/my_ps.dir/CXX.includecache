@@ -1,0 +1,22 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/devel/cpp_real_time_krk_31/day1/my_ps_streams/main.cpp
+iostream
+-
+fstream
+-
+boost/filesystem.hpp
+-
+linux/limits.h
+-
+map
+-
+cstdio
+-
+

@@ -1,0 +1,1 @@
+/home/devel/cpp_real_time_krk_31/day1/my_ps_streams/build/CMakeFiles/my_ps.dir

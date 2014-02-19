@@ -1,0 +1,106 @@
+
+Wprowadzenie do systemów czasu rzeczywistego
+********************************************
+
+
+System operacyjny czasu rzeczywistego
+=====================================
+
+System operacyjny czasu rzeczywistego (ang. *Real-Time Operating
+System* - **RTOS**) to komputerowy system operacyjny, który został
+opracowany tak, by spełnić wymagania narzucone na czas wykonywania
+zadanych operacji. Systemy takie stosuje się jako elementy
+komputerowych systemów sterowania pracujących w reżimie czasu
+rzeczywistego - system czasu rzeczywistego *[wikipedia]*.
+
+   System czasu rzeczywistego to taki, w którym poprawność obliczeń
+   nie zależy jedynie od logicznej poprawności tych obliczeń, ale
+   również od czasu w jakim zostały wykonane. Jeśli ograniczenia
+   czasowe systemu nie zostały spełnione, to mówimy iż w takim
+   systemie wystąpiła awaria.
+
+   -- Donald Gillies in the Real-Time Computing FAQ
+
+Najbardziej popularne systemy operacyjne czasu rzeczywistego to:
+
+   * LynxOS
+
+   * OSE
+
+   * QNX
+
+   * VxWorks
+
+   * Windows CE
+
+
+Praktyczny podział systemów czasu rzeczywistego
+===============================================
+
+* systemy o ostrych ograniczeniach czasowych (ang. *hard real-time*)
+  -gdy przekroczenie terminu powoduje poważne, a nawet katastrofalne
+  skutki, jak np. zagrożenie życia lub zdrowia ludzi, uszkodzenie lub
+  zniszczenie urządzeń, przy czym nie jest istotna wielkość
+  przekroczenia terminu a jedynie sam fakt jego przekroczenia,
+
+* systemy o mocnych ograniczeniach czasowych (ang. *firm real-time*) -
+  gdy fakt przekroczenia terminu powoduje całkowitą nieprzydatność
+  wypracowanego przez system wyniku, jednakże nie oznacza to
+  zagrożenia dla ludzi lub sprzętu; pojęcie to stosowane jest głównie
+  w opisie teoretycznym baz danych czasu rzeczywistego,
+
+* systemy o miękkich lub łagodnych ograniczeniach czasowych (ang.
+  *soft real-time*) - gdy przekroczenie pewnego czasu powoduje
+  negatywne skutki tym poważniejsze, im bardziej ten czas został
+  przekroczony.
+
+Podział ten jednak jest bardzo dyskusyjny. Traktując go dosłownie
+niemal nie istnieją systemy *hard* (może poza super-prostymi systemami
+typu DOS).
+
+
+Wymagania dla systemów czasu rzeczywistego
+==========================================
+
+Zachowaniem definiującym system operacyjny czasu rzeczywistego jest
+posiadanie znanego czasu na odpowiedź na zewnętrzne zdarzenie.
+Najczęściej jest to odpowiedź na przerwanie pochodzące od zewnętrznego
+urządzenia/sterownika. Odpowiedzią systemu jest wywołanie funkcji
+odpowiedzialnej za obsługę zdarzenia.
+
+
+Opóźnienie - *latency*
+----------------------
+
+Opóźnienie jest zdefiniowane jako czas od pojawienia się przerwania
+(zdarzenia) do wykonania się kodu odpowiedzialnego za jego obsługę.
+
+[obraz]
+
+Różnice RTOS w stosunku do zwykłych systemów operacyjnych przeważnie
+dotyczą:
+
+   * Zmodyfikowanego schedulera (planisty) pod kątem ułatwionego
+     przełączania się na zadania o wysokim priorytecie - algorytm
+     Earliest Deadline First  - priorytet dla zadań z najkrótszym
+     deadline - algorytm Rate-monotonic scheduling - dla przełączania
+     zadań okresowych
+
+   * minimalizacja opóźnienia obsługi przerwań
+
+   * minimalizacja opóźnienia przełączania wątków
+
+Tak skonstruowane systemy mają przeważnie mniejszą wydajność
+(*throughput*).
+
+Podsumowanie cech:
+
+* Opóźnienie obsługi przerwania
+
+* Opóźnienie schedulera(planisty)
+
+* Najgorszy przypadek opóźnienia
+
+* Przepustowość
+
+* Przełączanie kontekstu

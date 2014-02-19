@@ -1,0 +1,278 @@
+
+Podstawowe usługi systemowe
+***************************
+
+
+Informacje z drzewa "/proc"
+===========================
+
+"proc"
+   Jest to pseudo-system plików zawierający informacje o procesach.
+   Informacje te pobierane są z jądra systemu. Zwykle montowany jest w
+   katalogu "/proc".
+
+System "proc" zawiera zwykle następujące informacje:
+
+"/proc/[pid]"
+   Dla każdego procesu istnieje podkatalog o nazwie takiej jak PID
+   procesu. Każdy podkatalog zawiera z kolei informacje dotyczące
+   danego procesu. Poniżej przedstawiono przykładowe informacje:
+
+"/proc/[pid]/cmdline"
+   Przechowuje pełną linię polecenia użytą do wywołania tego procesu.
+
+"/proc/[pid]/cwd"
+   Link symboliczny do bierzącego katalogu procesu.
+
+"/proc/[pid]/environ"
+   Zawiera środowisko (*environment*) procesu. Wpisy oddzielone są
+   zerowym bajtem ('0'),
+
+      strings /proc/1/environ
+
+"/proc/[pid]/exe"
+   Link symboliczny zawierający ścieżkę wykonywanego programu.
+
+"/proc/[pid]/fd/"
+   Podkatalog zawierający wpisy dla każdego pliku który został otwarty
+   przez proces. Dla gniazd i potoków wpisy te są linkami
+   zawierającymi typ i "inode".
+
+"/proc/[pid]/io"
+   Plik zawiera statystyki I/O procesu.
+
+"/proc/[pid]/limits"
+   Informacje o miękkich i twardych ograniczeniach dla zasobów
+   procesu.
+
+"/proc/[pid]/mem"
+   Może zostać użyty do dostępu do pamięci procesu za pomocą "open",
+   "read" i "lseek".
+
+"/proc/[pid]/stat"
+   Informacja na temat bieżącego statusu procesu. Struktura
+   zdefiniowana w "/usr/src/linux/fs/proc/array.c".
+
+"/proc/[pid]/status"
+   Informacja o procesie w formacie przystwajalnym dla człowieka.
+
+"/proc/cmdline"
+   Argumenty przekazane do jądra w trakcie procesu bootowania.
+
+"/proc/config.gz"
+   Konfiguracja użyta do zbudowania jądra.
+
+"/proc/cpuinfo"
+   Zbiór informacji na temat procesora i architektury systemu.
+
+"/proc/devices"
+   Główne numery i grupy urządzeń.
+
+"/proc/diskstats"
+   Statystyki I/O dysków.
+
+"/proc/loadavg"
+   Średnie obciążenie systemu.
+
+"/proc/meminfo"
+   Statystyki zużycia pamięci systemu.
+
+"/proc/pci"
+   Lista wszystkich urządzeń na magistrali PCI wraz z konfiguracją.
+
+"/proc/self"
+   Link wskazujący na katalog "/proc/PID" bieżącego procesu.
+
+"/proc/stat"
+   Statystyki jądra/systemu.
+
+"/proc/sys"
+   Pliki i katalogi odpowiedzialne za zmienne jądra. Mogą być
+   odczytywane, a część modyfikowana.
+
+"/proc/sysvipc"
+   Zawiera pseudopliki "msq", "sem" oraz "shm". Pliki te zawierają
+   informację o obiektach IPC - *System V Interprocess Communication*,
+   odpowiednio: *message queues*, *semaphores*, *shared memory*).
+
+"/proc/uptime"
+   Dwie liczby - czas pracy systemu oraz czas spędzony na procesy w
+   stanie *idle*. Obie wartości podano w sekundach.
+
+"/proc/version"
+   Bieżąca wersja jądra.
+
+"/proc/vmstat"
+   Statystyki pamięci wirtualnej.
+
+
+Ovecommiting
+------------
+
+"/proc/sys/vm/overcommit_memory"
+   Zawiera informację o tym jak jądro linuksa ma postepować w
+   przypadku próby pozyskania wolnej pamięci za pomocą "malloc()".
+   Domyślna wartość "0" oznacza że system może poprawnie zakończyć
+   wykonanie funkcji "malloc()" mimo iż w systemie nie ma
+   wystarczającej ilości wolnej pamięci. Po przypisaniu wartości "2"
+   system będzie sprawdzał ilość wolnej pamięci przy próbie alokacji.
+   Warto prześledzić różne zachowanie poniższego programu dla różnych
+   wartości "overcommit_memory"
+
+   const size_t hundredmb = 1024*1024*100;
+
+   int main()  {
+       size_t n = 0;
+       char* p;
+       while(true)
+       {
+           p = (char*)malloc(hundredmb);
+           if (p == NULL) {
+               cout << "maloc failure after " << n << " MiB" << endl;
+               return -1;
+           }
+           //memset(p, 0, hundredmb);
+           cout << "got " << n << " MiB" << endl;
+           n += 100;
+       }
+   }
+
+
+Informacje z drzewa "/sys"
+==========================
+
+"sysfs"
+   Jest to pseudo-system plików udostępniający struktury danych jądra
+   i łączący je z przestrzenią użytkownika. Zwykle montowany jest w
+   katalogu "/sys". Jest związany z infrastrukturą "kobject"
+   starowników jądra. Dla każdego zarejestrowanego w systemie kobiektu
+   utworzony jest podkatalog. Hierarchia tych podkatalogów odpowiada
+   hierarchii tych obiektów w jądrze.
+
+
+Kobject
+-------
+
+Struktura Kobject miała być zunifikowanym sposobem na automatyczne
+liczenie referencji do dowolnych obiektów. Jednak z czasem Kobject'y
+doczekały się dodatkowych funkcjonalności, takich jak reprezentowanie
+posiadanych w sobie obiektów w systemie sysfs. Generalnie w kodzie
+jądra linuxa nie spotyka się samych kobiektów, tylko złożone
+struktury, w skład których wchodzi Kobject.
+
+Kobiekty stosuje się przede wszystkim jako:
+
+   * Liczniki referencji do dowolnych obiektów.
+
+   * Sposób reprezentacji połączeń pomiędzy obiektami.
+
+   * Sposób reprezentacji obiektów w systemie "sysfs".
+
+Kobject jest tak naprawdę typu "struct kobject" i jest zdefiniowany w
+pliku "<linux/kobject.h>" wraz ze wszystkimi pomocnymi funkcjami.
+
+Przykładowa struktura z dołączonym do niej Kobject'em reprezentująca
+urządzenie znakowe w jądrze:
+
+   struct cdev {
+       struct kobject kobj;
+       struct module *owner;
+       struct file_operations *ops;
+       struct list_head list;
+       dev_t dev;
+       unsigned int count;
+   };
+
+
+Węzły urządzeń - "/dev"
+=======================
+
+Katalog "/dev" zawiera pliki specjalne, które odpowiadają wszystkim
+urządzeniom. W kernelach 2.4.x pliki były reprezentacją wirtualnego
+systemu plików "devfs". W kernelach nowszych 2.6.x pojawił się nowy
+system plików "udev" W przeciwieństwie do devfs udev nie przechowuje
+statycznego katalogu "/dev". Zamiast tego w "/dev" umieszczane są
+jedynie pliki reprezentujące urządzenia faktycznie obecne w systemie.
+W odróżnieniu od devfs, "udev" działa w przestrzeni użytkownika i
+pozwala na znacznie swobodniejszą obsługę katalogu "/dev".
+
+
+Urządzenia znakowe - *character devices*
+----------------------------------------
+
+Urządzenia znakowe to takie, których odczyt i zapis odbywa się
+sekwencyjnie - bajt po bajcie. Typowe urządzenia znakowe to np. mysz
+czy klawiatura.
+
+Aby utworzyć nowe urządzenie należy użyć funkcji:
+
+int register_chrdev(unsigned int major, const char * name, const struct file_operations *     fops)
+
+Przykładowy szkielet sterownika urządzenia znakowego:
+
+   // niezbędne!
+   MODULE_AUTHOR("Leszek Tarkowski");
+   MODULE_DESCRIPTION("hello world example");
+   MODULE_VERSION("0.1");
+   MODULE_LICENSE("GPL");
+
+   #define DEVICE_NAME "device"
+   #define CLASS_NAME "char_test"
+
+   static struct file_operations char_fops = {
+       .read    = char_read,
+       .open    = char_open,
+       .release = char_release
+   };
+
+   static int char_open(struct inode *inode, struct file *file);
+   static int char_release(struct inode *inode, struct file *file);
+   static ssize_t char_read(struct file *file, char __user *buf,
+                size_t count, loff_t *ppos);
+
+   static int __init char_init(void)
+   {
+       dev_major = register_chrdev(0, DEVICE_NAME, &char_fops);
+       plp_class = class_create(THIS_MODULE, CLASS_NAME);
+       char_dev = device_create(plp_class, NULL, MKDEV(dev_major,0),
+                                NULL, CLASS_NAME "_" DEVICE_NAME);
+       return 0;
+   }
+
+   static void __exit char_exit(void)
+   {
+       device_destroy(plp_class, MKDEV(dev_major, 0));
+       class_unregister(plp_class);
+       class_destroy(plp_class);
+       unregister_chrdev(dev_major, DEVICE_NAME);
+   }
+
+   module_init(char_init);
+   module_exit(char_exit);
+
+Aby zarejestrować urządzenie w systemie. Opisy funkcji znajdują się w
+
+   man 9 device_create
+
+Kompilacja modułu wymaga stworzenia pliku "Makefile"
+
+   obj-m   := char_test.o
+
+I skompilowania z użyciem make, wraz z "Makefile" z bierzącej wersji
+jądra:
+
+   make -C /lib/modules/`uname -r`/build modules M=$PWD
+
+Zbudowany moduł możemy spróbować włączyć do pracującego jądra, i
+spróbować obserwować efekty jego pracy:
+
+   sudo insmod char_test.ko
+   dmesg | tail
+   sudo cat /dev/char_test
+
+
+Urządzenia blokowe - *block devices*
+------------------------------------
+
+Urządzenia blokowe to takie, które umożliwiają swobodny dostęp do
+danych - np. dyski twarde.

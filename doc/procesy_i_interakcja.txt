@@ -1,0 +1,30 @@
+
+Procesy i interakcja procesów
+*****************************
+
+* Procesy
+  * Model procesu Linux
+  * Atrybuty procesów
+  * Argumenty programu
+  * Tworzenie procesów potomnych
+  * Exec
+  * Czekając na proces
+    * Wywołanie systemowe "clone"
+* Prymitywne sposoby komunikacji między procesami
+  * Pliki blokujący
+  * Blokowanie plików
+* Sygnały
+  * Nazwy sygnałów
+  * Obsługa sygnałów
+  * Zestawy sygnałów
+    * Ustalanie działania sygnału
+  * Sygnały a funkcje systemowe
+  * Blokowanie sygnałów
+  * Wysyłanie sygnałów
+  * Wysyłanie sygnałów do siebie
+  * Funkcja systemowa "pause"
+* Komunikacja za pomocą potoków
+  * Nieblokujące odczyty i zapisy
+    * Obsługa wielu potoków
+    * Funkcja exec i potoki
+  * Potoki nazwane = pliki FIFO
